@@ -581,5 +581,5 @@ function setInfo(text) {
 
 	// show the text only for 3 seconds
 	infotime = new Date().getTime();
-	setTimeout( () => { if(new Date().getTime() - infotime > 2999) info.innerHTML = `LensLegend, University of Glasgow, <a href="https://github.com/jkcuk/LensLegend">https://github.com/jkcuk/LensLegend</a>` }, 3000);
+	setTimeout( () => { if(new Date().getTime() - infotime > 2999) info.innerHTML = `LensletArrayLegend, University of Glasgow, <a href="https://github.com/jkcuk/LensletArrayLegend">https://github.com/jkcuk/LensletArrayLegend</a>` }, 3000);
 }
