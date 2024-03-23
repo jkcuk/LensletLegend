@@ -34,7 +34,7 @@ let fovVideoFeed = 68;	// (environment-facing) camera
 let fovScreen = 68;
 
 let cameraLensDistance = 10.0;
-let cameraBackgroundDistance = 1000.0;
+let backgroundSphereRadius = 30.0;
 
 let info = document.createElement('div');
 let infotime;	// the time the last info was posted
@@ -60,7 +60,7 @@ function init() {
 	scene = new THREE.Scene();
 	scene.background = new THREE.Color( 'skyblue' );
 	let windowAspectRatio = window.innerWidth / window.innerHeight;
-	camera = new THREE.PerspectiveCamera( fovScreen, windowAspectRatio, 0.1, 2*cameraBackgroundDistance );
+	camera = new THREE.PerspectiveCamera( fovScreen, windowAspectRatio, 0.1, 2*backgroundSphereRadius );
 	camera.position.z = cameraLensDistance;
 	screenChanged();
 	
@@ -73,7 +73,7 @@ function init() {
 	createVideoFeed();
 
 	addLens();
-	addBackground();
+	addBackgroundSphere();
 
 	// user interface
 
@@ -276,31 +276,41 @@ function addLens() {
 			}
 
 			void main() {
-				// the camera pinhole is positioned at (0, 0, cameraLensDistance),
-				// the intersection point is (intersectionPoint.x, intersectionPoint.y, 0),
+				// the camera pinhole is positioned at 
+				//   cameraPosition = (0, 0, cameraLensDistance),
+				// the intersection point is 
+				//   intersectionPoint = (intersectionPoint.x, intersectionPoint.y, 0),
 				// so the "backwards" ray direction from the camera to the intersection point is
-				// d_1 = (intersectionPoint.x, intersectionPoint.y, -cameraLensDistance), which,
-				// when "normalised" such that its z component = 1, is
-				// d = (-intersectionPoint.x/cameraLensDistance, -intersectionPoint.y/cameraLensDistance, 1).
-				vec3 ci = intersectionPoint - cameraPosition;
-				vec2 d = ci.xy/ci.z;
+				//   d = intersectionPoint - cameraPosition
+				//     = (intersectionPoint.x, intersectionPoint.y, -cameraLensDistance), 
+				// which, when "normalised" such that its z component = 1, is
+				//   d1 = d / d_z
+				//      = (-intersectionPoint.x/cameraLensDistance, -intersectionPoint.y/cameraLensDistance, 1).
+				vec3 d = intersectionPoint - cameraPosition;
+				vec2 d1 = d.xy/d.z;
 				vec2 i = intersectionPoint.xy;
 
+				// if the first array is visible, ...
 				if(visible1) {
-					d = lensletArrayDeflect(d, i, principalPoint001, alpha1, period1, focalLength1);
-					// i = i + deltaZ12*d;
-					i = i + (focalLength1 + focalLength2 + offsetFromConfocal)*d;
+					// ... deflect the light-ray direction accordingly
+					d1 = lensletArrayDeflect(d1, i, principalPoint001, alpha1, period1, focalLength1);
 				}
 
+				// "propagate" the light-ray into the plane of the second  array
+				i = i + (focalLength1 + focalLength2 + offsetFromConfocal)*d1;
+
+				// if the second array is visible, ...
 				if(visible2) {
-					d = lensletArrayDeflect(d, i, principalPoint002, alpha2, period1 + DeltaPeriod, focalLength2);
+					// ... deflect the light-ray direction accordingly
+					d1 = lensletArrayDeflect(d1, i, principalPoint002, alpha2, period1 + DeltaPeriod, focalLength2);
 				}
 
-				if((abs(d.x) < tanHalfFovH) && (abs(d.y) < tanHalfFovV)) {
-					gl_FragColor = vec4(0.9, 0.9, 0.9, 1)*texture2D(videoFeedTexture, vec2(0.5-0.5*d.x/tanHalfFovH, 0.5-0.5*d.y/tanHalfFovV));
+				if((abs(d1.x) < tanHalfFovH) && (abs(d1.y) < tanHalfFovV)) {
+					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d1.x/tanHalfFovH, 0.5-0.5*d1.y/tanHalfFovV));
 				} else {
-					gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+					gl_FragColor = vec4(0.53, 0.81, 0.92, 1.0);
 				}
+				gl_FragColor *= vec4(0.9, 0.9, 0.9, 1);
 			}
 			
 		`
@@ -310,13 +320,15 @@ function addLens() {
 }
 
 /** create lens object */
-function addBackground() {
+function addBackgroundSphere() {
 	const videoFeedTexture = new THREE.VideoTexture( videoFeed );
 	videoFeedTexture.colorSpace = THREE.SRGBColorSpace;
 
-	// the disk representing the lens
-	const geometry = new THREE.PlaneGeometry( 2*cameraBackgroundDistance, 2*cameraBackgroundDistance, 1, 1 ); 
+	// the sphere surrouning the camera in all directions
+	const geometry = 
+		new THREE.SphereGeometry( backgroundSphereRadius );
 	backgroundShaderMaterial = new THREE.ShaderMaterial({
+		side: THREE.DoubleSide,
 		uniforms: { 
 			videoFeedTexture: { value: videoFeedTexture }, 
 			tanHalfFovH: { value: 1.0 },
@@ -344,27 +356,31 @@ function addBackground() {
 			uniform float tanHalfFovV;
 			
 			void main() {
-				// the camera pinhole is positioned at (0, 0, cameraLensDistance),
-				// the intersection point is (intersectionPoint.x, intersectionPoint.y, cameraLensDistance-cameraBackgroundDistance),
+				// the camera pinhole is positioned at 
+				//   cameraPosition = (0, 0, cameraLensDistance),
+				// the intersection point is 
+				//   intersectionPoint = (intersectionPoint.x, intersectionPoint.y, 0),
 				// so the "backwards" ray direction from the camera to the intersection point is
-				// d_1 = (intersectionPoint.x, intersectionPoint.y, -cameraBackgroundDistance), which,
-				// when "normalised" such that its z component = 1, is
-				// d = (-intersectionPoint.x/cameraBackgroundDistance, -intersectionPoint.y/cameraBackgroundDistance, 1).
-				vec3 ci = intersectionPoint - cameraPosition;
-				vec2 d = 0.01*ci.xy/ci.z;	// TODO why do I need that factor?
+				//   d = intersectionPoint - cameraPosition
+				//     = (intersectionPoint.x, intersectionPoint.y, -cameraLensDistance), 
+				// which, when "normalised" such that its z component = 1, is
+				//   d1 = d / d_z
+				//      = (-intersectionPoint.x/cameraLensDistance, -intersectionPoint.y/cameraLensDistance, 1).
+				vec3 d = intersectionPoint - cameraPosition;
+				vec2 d1 = d.xy/d.z;
+				// vec2 d1 = -d.xy/1000.0;
 				
-				if((abs(d.x) < tanHalfFovH) && (abs(d.y) < tanHalfFovV)) {
-					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d.x/tanHalfFovH, 0.5-0.5*d.y/tanHalfFovV));
+				if((abs(d1.x) < tanHalfFovH) && (abs(d1.y) < tanHalfFovV)) {
+					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d1.x/tanHalfFovH, 0.5-0.5*d1.y/tanHalfFovV));
 				} else {
-					gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+					gl_FragColor = vec4(0.53, 0.81, 0.92, 1.0);
 				}
 			}
 			
 		`
 	});
-	const rectangle = new THREE.Mesh( geometry, backgroundShaderMaterial ); 
-	rectangle.translateZ(cameraLensDistance - cameraBackgroundDistance);
-	scene.add( rectangle );
+	const backgroundSphere = new THREE.Mesh( geometry, backgroundShaderMaterial ); 
+	scene.add( backgroundSphere );
 }
 
 // see https://github.com/mrdoob/three.js/blob/master/examples/webgl_animation_skinning_additive_blending.html
@@ -601,7 +617,7 @@ function takePhoto() {
 
 		storedPhoto = renderer.domElement.toDataURL('image/png');
 
-		storedPhotoDescription = `LensletArrayLegend`;
+		storedPhotoDescription = `LensletLegend`;
 		// 
 		document.getElementById('storedPhoto').src=storedPhoto;
 		document.getElementById('storedPhotoThumbnail').src=storedPhoto;
@@ -618,7 +634,7 @@ async function share() {
 		fetch(storedPhoto)
 		.then(response => response.blob())
 		.then(blob => {
-			const file = new File([blob], 'LensletArrayLegend '+storedPhotoDescription+'.png', { type: blob.type });
+			const file = new File([blob], 'LensletLegend '+storedPhotoDescription+'.png', { type: blob.type });
 
 			// Use the Web Share API to share the screenshot
 			if (navigator.share) {
@@ -662,5 +678,5 @@ function setInfo(text) {
 
 	// show the text only for 3 seconds
 	infotime = new Date().getTime();
-	setTimeout( () => { if(new Date().getTime() - infotime > 2999) info.innerHTML = `LensletArrayLegend, University of Glasgow, <a href="https://github.com/jkcuk/LensletArrayLegend">https://github.com/jkcuk/LensletArrayLegend</a>` }, 3000);
+	setTimeout( () => { if(new Date().getTime() - infotime > 2999) info.innerHTML = `LensletLegend, University of Glasgow, <a href="https://github.com/jkcuk/LensletLegend">https://github.com/jkcuk/LensletLegend</a>` }, 3000);
 }
