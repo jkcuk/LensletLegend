@@ -162,7 +162,7 @@ function addLens() {
 	videoFeedTexture.colorSpace = THREE.SRGBColorSpace;
 
 	// the disk representing the lens
-	const geometry = new THREE.CircleGeometry( 5, 32 ); 
+	const geometry = new THREE.CircleGeometry( 5, 128 ); 
 	lensletArrayShaderMaterial = new THREE.ShaderMaterial({
 		// side: THREE.DoubleSide,
 		uniforms: { 
