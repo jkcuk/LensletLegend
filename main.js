@@ -428,7 +428,6 @@ function createGUI() {
 	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { lensletArrayShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
 	folderArray2.add( params2, 'Offset from confocal', -0.1, 0.1).onChange( (o) => { lensletArrayShaderMaterial.uniforms.offsetFromConfocal.value = o; } );
 
-
 	const folderSettings = gui.addFolder( 'Other controls' );
 	// folderSettings.add( params, 'Toggle show circles');
 	// folderSettings.add( params, 'Swap arrays' );
