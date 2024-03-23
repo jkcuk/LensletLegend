@@ -149,7 +149,7 @@ function updateUniforms() {
 		offsetFromConfocal;
 	// arrange them symmetrically around z=0
 	raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z = +0.5*s;
-	raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z = -0.5*s;
+	raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z = -0.5*s - 0.001;
 
 	// set the array periods
 	raytracingSphereShaderMaterial.uniforms.period2.value = raytracingSphereShaderMaterial.uniforms.period1.value + deltaPeriod;
@@ -307,16 +307,62 @@ function addRaytracingSphere() {
 				return lensDeflect(d, intersectionPoint - principalPoint, focalLength);
 			}
 
+			// Pass the current ray (start point p, direction d, brightness factor b) through (or around) a lenslet array.
+			// The lenslet array is in a z plane through centreOfArray; it is simulated as ideal thin lenses.
+			// The lenslets, all of focal length f, are arranged in a square array of the given period, 
+			// rotated by alpha around the z axis.  The component is circular, with the given radius, centred on centreOfArray.
+			void passThroughLensletArray(
+				inout vec3 p, 
+				inout vec3 d, 
+				inout vec4 b,
+				vec3 centreOfArray, 
+				float radius,
+				float alpha,
+				float period,
+				float focalLength
+			) {
+				// "normalised" version of d, scaled such that the z component is 1
+				vec3 d1 = d/d.z;
+
+				// calculate the intersection point with that array
+				float deltaZ = centreOfArray.z - p.z;
+				p = p + d1*deltaZ;
+
+				// does the intersection point lie with in the radius?
+				vec2 r = p.xy - centreOfArray.xy;
+				float r2 = dot(r, r);	// length squared of vector r
+				if(r2 < radius*radius) {
+					// the intersection point lies inside the radius, so the component does something to the ray
+
+					// which direction is the ray passing through it?
+					if(d.z < 0.0) {
+						// the ray is passing through array 1 in the direction for which it is designed; deal with it accordingly
+	
+						// deflect the light-ray direction accordingly and make sure that the sign of the z component remains the same
+						d = vec3(lensletArrayDeflect(-d1.xy, p.xy, centreOfArray.xy, alpha, period, focalLength), sign(d.z));
+						// d = d.z*d1;
+
+						// lower the brightness factor, giving the light a blue tinge
+						b *= vec4(0.9, 0.9, 0.99, 1);
+					} else {
+						// the ray is passing through array 1 in the opposite direction for which it is designed
+						b *= vec4(0.7, 0.3, 0.3, 1);
+					}
+				
+					if(deltaZ*d.z < 0.0) {
+						// the ray actually has to travel *backwards* -- make the array red
+						b *= vec4(0.7, 0.3, 0.3, 1);
+					}
+				} 
+			}
+
 			void main() {
 				// first calculate the current light-ray direction:
 				// the camera pinhole is positioned at cameraPosition,
 				// the intersection point with the sphere is intersectionPoint,
 				// so the "backwards" ray direction from the camera to the intersection point is
-				//   d = intersectionPoint - cameraPosition,
-				// which, when "normalised" such that its z component equals -1, is
-				//   d1 = -d / d_z
+				//   d = intersectionPoint - cameraPosition
 				vec3 d = intersectionPoint - cameraPosition;
-				vec3 d1 = -d/d.z;
 
 				// the current ray start position; start at the camera
 				vec3 p = cameraPosition;
@@ -325,87 +371,17 @@ function addRaytracingSphere() {
 				vec4 b = vec4(1.0, 1.0, 1.0, 1.0);
 
 				// is the first array visible?
-				if(visible1) {
-					// yes, array 1 is visible
-
-					// calculate the intersection point with that array
-					p = p - d1*(centreOfArray1.z - p.z);
-
-					// does the intersection point lie with in the radius?
-					vec2 r = p.xy - centreOfArray1.xy;
-					float r2 = dot(r, r);	// length squared of vector r
-					if(r2 < radius1*radius1) {
-						// the intersection point lies inside the radius
-
-						// which direction is the ray passing through it?
-						if(d.z < 0.0) {
-							// the ray is passing through array 1 in the direction for which it is designed; deal with it accordingly
-		
-							// deflect the light-ray direction accordingly
-							d1 = vec3(lensletArrayDeflect(d1.xy, p.xy, centreOfArray1.xy, alpha1, period1, focalLength1), -1.0);
-
-							// lower the brightness factor
-							b *= vec4(0.9, 0.9, 0.9, 1);
-						} else {
-							// the ray is passing through array 1 in the opposite direction for which it is designed
-							b *= vec4(0.9, 0.1, 0.1, 1);
-						}
-					} 
-				}
+				if(visible1) passThroughLensletArray(p, d, b, centreOfArray1,  radius1, alpha1, period1, focalLength1);
 
 				// is the second array visible?
-				if(visible2) {
-					// yes, array 2 is visible
-
-					// calculate the intersection point with that array
-					p = p - d1*(centreOfArray2.z - p.z);
-
-					// does the intersection point lie with in the radius?
-					vec2 r = p.xy - centreOfArray2.xy;
-					float r2 = dot(r, r);	// length squared of vector r
-					if(r2 < radius2*radius2) {
-						// the intersection point lies inside the radius
-
-						// which direction is the ray passing through it?
-						if(d.z < 0.0) {
-							// the ray is passing through the array in the direction for which it is designed; deal with it accordingly
-		
-							// deflect the light-ray direction accordingly
-							d1 = vec3(lensletArrayDeflect(d1.xy, p.xy, centreOfArray2.xy, alpha2, period2, focalLength2), -1.0);
-
-							// lower the brightness factor
-							b *= vec4(0.9, 0.9, 0.9, 1);
-						} else {
-							// the ray is passing through the array in the opposite direction for which it is designed
-							b *= vec4(0.9, 0.1, 0.1, 1);
-						}
-					} 
-				}
-
-				// // if the second array is visible, ...
-				// if(visible2) {
-				// 	// ... calculate the intersection point with that array
-				// 	p = p - d1*(centreOfArray2.z - p.z);
-
-				// 	// does the intersection point lie with in the radius?
-				// 	vec2 r = p.xy - centreOfArray2.xy;
-				// 	float r2 = dot(r, r);	// length squared of vector r
-				// 	if(r2 < radius2*radius2) {
-				// 		// the intersection point lies inside the radius
-
-				// 		// deflect the light-ray direction accordingly
-				// 		d1 = vec3(lensletArrayDeflect(d1.xy, p.xy, centreOfArray2.xy, alpha2, period2, focalLength2), -1.0);
-
-				// 		// lower the brightness factor
-				// 		b = vec4(0.9, 0.9, 0.9, 1)*b;
-				// 	}
-				// }
+				if(visible2) passThroughLensletArray(p, d, b, centreOfArray2,  radius2, alpha2, period2, focalLength2);
 
 				// does the ray intersect the (infinitely distant) camera image whose angular width and height is
 				// given by arctan(2*tanHalfFovH) and arctan(2*tanHalfFovV?
+				vec3 d1 = d/d.z;
 				if((abs(d1.x) < tanHalfFovH) && (abs(d1.y) < tanHalfFovV)) {
 					// yes, the ray intersects the image; take the pixel colour from the camera's video feed
-					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5+0.5*d1.x/tanHalfFovH, 0.5+0.5*d1.y/tanHalfFovV));
+					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d1.x/tanHalfFovH, 0.5-0.5*d1.y/tanHalfFovV));
 				} else {
 					// no it doesn't; give the pixel a default colour, depending on which hemisphere it points towards
 					if(d.z < 0.0) {
@@ -456,7 +432,7 @@ function createGUI() {
 
 	folderArray1.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible1.value = v; } );
 	folderArray1.add( params1, 'Focal length, <i>f</i><sub>1</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength1.value = f; } );
-	folderArray1.add( params1, 'Period, <i>p</i><sub>1</sub>', 0.1, 0.5).onChange( (p) => { raytracingSphereShaderMaterial.uniforms.period1.value = p; } );
+	folderArray1.add( params1, 'Period, <i>p</i><sub>1</sub>', 0.01, 1).onChange( (p) => { raytracingSphereShaderMaterial.uniforms.period1.value = p; } );
 	folderArray1.add( params1, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha1.value = alpha/180.0*Math.PI; } );
 
 	const folderArray2 = gui.addFolder( 'Far lenslet array' );
@@ -465,7 +441,7 @@ function createGUI() {
 	folderArray2.add( params2, 'Focal length, <i>f</i><sub>2</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength2.value = f; } );
 	folderArray2.add( params2, '&Delta;<sub>period</sub>, <i>p</i><sub>2</sub> - <i>p</i><sub>1</sub>', -0.1, 0.1).onChange( (p) => { deltaPeriod = p; } );
 	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
-	folderArray2.add( params2, 'Offset from confocal', -0.2, 0.2).onChange( (o) => { offsetFromConfocal = o; } );
+	folderArray2.add( params2, 'Offset from confocal', -0.25, 0.25).onChange( (o) => { offsetFromConfocal = o; } );
 
 
 	const folderSettings = gui.addFolder( 'Other controls' );
