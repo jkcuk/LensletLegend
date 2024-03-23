@@ -25,17 +25,18 @@ let renderer;
 let videoFeed;
 let camera;
 let controls;
-let lensletArrayShaderMaterial;
-let backgroundShaderMaterial;
-// let geometry;
+let raytracingSphereShaderMaterial;
 	
 // Nokia HR20, according to https://www.camerafv5.com/devices/manufacturers/hmd_global/nokia_xr20_ttg_0/
 let fovVideoFeed = 68;	// (environment-facing) camera
 let fovScreen = 68;
 
 let cameraLensDistance = 10.0;
-let backgroundSphereRadius = 30.0;
+let raytracingSphereRadius = 20.0;
+let offsetFromConfocal = 0.0;
+let deltaPeriod = 0.0;
 
+// the info text area
 let info = document.createElement('div');
 let infotime;	// the time the last info was posted
 
@@ -58,9 +59,9 @@ function init() {
 	createInfo();
 
 	scene = new THREE.Scene();
-	scene.background = new THREE.Color( 'skyblue' );
+	// scene.background = new THREE.Color( 'skyblue' );
 	let windowAspectRatio = window.innerWidth / window.innerHeight;
-	camera = new THREE.PerspectiveCamera( fovScreen, windowAspectRatio, 0.1, 2*backgroundSphereRadius );
+	camera = new THREE.PerspectiveCamera( fovScreen, windowAspectRatio, 0.1, 2*raytracingSphereRadius + 1 );
 	camera.position.z = cameraLensDistance;
 	screenChanged();
 	
@@ -72,8 +73,7 @@ function init() {
 
 	createVideoFeed();
 
-	addLens();
-	addBackgroundSphere();
+	addRaytracingSphere();
 
 	// user interface
 
@@ -121,8 +121,38 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	if(!showingStoredPhoto) {
+		// update uniforms
+		updateUniforms();
+
 		renderer.render( scene,  camera );
 	}
+}
+
+function updateUniforms() {
+	let tanHalfFovH, tanHalfFovV;
+	if(aspectRatioVideoFeed > 1.0) {
+		// horizontal orientation
+		tanHalfFovH = Math.tan(0.5*fovVideoFeed*Math.PI/180.0);
+		tanHalfFovV = Math.tan(0.5*fovVideoFeed*Math.PI/180.0)/aspectRatioVideoFeed;
+	} else {
+		// vertical orientation
+		tanHalfFovH = Math.tan(0.5*fovVideoFeed*Math.PI/180.0)*aspectRatioVideoFeed;
+		tanHalfFovV = Math.tan(0.5*fovVideoFeed*Math.PI/180.0);
+	}
+	raytracingSphereShaderMaterial.uniforms.tanHalfFovH.value = tanHalfFovH;
+	raytracingSphereShaderMaterial.uniforms.tanHalfFovV.value = tanHalfFovV;
+
+	// calculate the separation between the two arrays, s = f1 + f2 + offsetFromConfocal
+	let s = 
+		raytracingSphereShaderMaterial.uniforms.focalLength1.value + 
+		raytracingSphereShaderMaterial.uniforms.focalLength2.value +
+		offsetFromConfocal;
+	// arrange them symmetrically around z=0
+	raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z = +0.5*s;
+	raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z = -0.5*s;
+
+	// set the array periods
+	raytracingSphereShaderMaterial.uniforms.period2.value = raytracingSphereShaderMaterial.uniforms.period1.value + deltaPeriod;
 }
 
 function createVideoFeed() {
@@ -156,35 +186,35 @@ function createVideoFeed() {
 	}
 }
 
-/** create lens object */
-function addLens() {
+/** create raytracing phere */
+function addRaytracingSphere() {
 	const videoFeedTexture = new THREE.VideoTexture( videoFeed );
 	videoFeedTexture.colorSpace = THREE.SRGBColorSpace;
 
-	// the disk representing the lens
-	const geometry = new THREE.CircleGeometry( 5, 128 ); 
-	lensletArrayShaderMaterial = new THREE.ShaderMaterial({
-		// side: THREE.DoubleSide,
+	// the sphere surrouning the camera in all directions
+	const geometry = 
+		new THREE.SphereGeometry( raytracingSphereRadius );
+	raytracingSphereShaderMaterial = new THREE.ShaderMaterial({
+		side: THREE.DoubleSide,
+		// wireframe: true,
 		uniforms: { 
-			// cameraPosition: { value: camera.position },
 			visible1: { value: true },
-			period1: { value: 0.4 },	// period in u direction
+			period1: { value: 0.4 },
 			alpha1: { value: 0.0 },
 			focalLength1: { value: 1.0 },
-			principalPoint001: { value: new THREE.Vector2(0, 0) },	// principal point of lenslet (0, 0)
-			deltaZ12: { value: 0.0 },	// separation between arrays 1 and 2
-			offsetFromConfocal: {value:  0.0 },	// offset from confocal configuration
+			centreOfArray1: { value: new THREE.Vector3(0, 0, 0) },	// principal point of lenslet (0, 0)
+			radius1: { value: 5.0 },	// radius of array 1
 			visible2: { value: true },
-			DeltaPeriod: { value: 0.0 },	// period of array 2 - period of array 1
+			period2: { value: 0.4 },
 			alpha2: { value: 0 },
 			focalLength2: { value: -1.0 },
-			principalPoint002: { value: new THREE.Vector2(0, 0) },	// principal point of lenslet (0, 0)
+			centreOfArray2: { value: new THREE.Vector3(0, 0, 0) },	// principal point of lenslet (0, 0)
+			radius2: { value: 5.0 },	// radius of array 2
 			videoFeedTexture: { value: videoFeedTexture }, 
-			cameraLensDistance: { value: cameraLensDistance },
+			// cameraLensDistance: { value: cameraLensDistance },
 			tanHalfFovH: { value: 1.0 },
 			tanHalfFovV: { value: 1.0 }
 		},
-		// wireframe: true,
 		vertexShader: `
 			varying vec3 intersectionPoint;
 
@@ -208,17 +238,19 @@ function addLens() {
 			uniform float alpha1;	// rotation angle of array 1
 			uniform float period1;	// period of array 1
 			uniform float focalLength1;	// focal length of array 1
-			uniform vec2 principalPoint001;	// principal point of lenslet (0, 0) in array 1
+			uniform vec3 centreOfArray1;	// centre of array 1,  and principal point of lenslet (0, 0)
+			uniform float radius1;	// radius of array 1
 
-			uniform float deltaZ12;	// z separation between arrays 1 and 2
-			uniform float offsetFromConfocal;	// offset from confocal configuration
+			// uniform float deltaZ12;	// z separation between arrays 1 and 2
+			// uniform float offsetFromConfocal;	// offset from confocal configuration
 
 			// lenslet array 2
 			uniform bool visible2;
 			uniform float alpha2;	// rotation angle of array 2
-			uniform float DeltaPeriod;	// period of array 2 - period of array 1
+			uniform float period2;	// period of array 2
 			uniform float focalLength2;	// focal length of array 2
-			uniform vec2 principalPoint002;	// principal point of lenslet (0, 0) in array 2
+			uniform vec3 centreOfArray2;	// centre of array 2,  and principal point of lenslet (0, 0)
+			uniform float radius2;	// radius of array 2
 
 			uniform sampler2D videoFeedTexture;
 			uniform float tanHalfFovH;
@@ -276,118 +308,118 @@ function addLens() {
 			}
 
 			void main() {
-				// the camera pinhole is positioned at 
-				//   cameraPosition = (0, 0, cameraLensDistance),
-				// the intersection point is 
-				//   intersectionPoint = (intersectionPoint.x, intersectionPoint.y, 0),
+				// first calculate the current light-ray direction:
+				// the camera pinhole is positioned at cameraPosition,
+				// the intersection point with the sphere is intersectionPoint,
 				// so the "backwards" ray direction from the camera to the intersection point is
-				//   d = intersectionPoint - cameraPosition
-				//     = (intersectionPoint.x, intersectionPoint.y, -cameraLensDistance), 
-				// which, when "normalised" such that its z component = 1, is
-				//   d1 = d / d_z
-				//      = (-intersectionPoint.x/cameraLensDistance, -intersectionPoint.y/cameraLensDistance, 1).
+				//   d = intersectionPoint - cameraPosition,
+				// which, when "normalised" such that its z component equals -1, is
+				//   d1 = -d / d_z
 				vec3 d = intersectionPoint - cameraPosition;
-				vec2 d1 = d.xy/d.z;
-				vec2 i = intersectionPoint.xy;
+				vec3 d1 = -d/d.z;
 
-				// if the first array is visible, ...
+				// the current ray start position; start at the camera
+				vec3 p = cameraPosition;
+
+				// current brightness factor; this will multiply the colour at the end
+				vec4 b = vec4(1.0, 1.0, 1.0, 1.0);
+
+				// is the first array visible?
 				if(visible1) {
-					// ... deflect the light-ray direction accordingly
-					d1 = lensletArrayDeflect(d1, i, principalPoint001, alpha1, period1, focalLength1);
+					// yes, array 1 is visible
+
+					// calculate the intersection point with that array
+					p = p - d1*(centreOfArray1.z - p.z);
+
+					// does the intersection point lie with in the radius?
+					vec2 r = p.xy - centreOfArray1.xy;
+					float r2 = dot(r, r);	// length squared of vector r
+					if(r2 < radius1*radius1) {
+						// the intersection point lies inside the radius
+
+						// which direction is the ray passing through it?
+						if(d.z < 0.0) {
+							// the ray is passing through array 1 in the direction for which it is designed; deal with it accordingly
+		
+							// deflect the light-ray direction accordingly
+							d1 = vec3(lensletArrayDeflect(d1.xy, p.xy, centreOfArray1.xy, alpha1, period1, focalLength1), -1.0);
+
+							// lower the brightness factor
+							b *= vec4(0.9, 0.9, 0.9, 1);
+						} else {
+							// the ray is passing through array 1 in the opposite direction for which it is designed
+							b *= vec4(0.9, 0.1, 0.1, 1);
+						}
+					} 
 				}
 
-				// "propagate" the light-ray into the plane of the second  array
-				i = i + (focalLength1 + focalLength2 + offsetFromConfocal)*d1;
-
-				// if the second array is visible, ...
+				// is the second array visible?
 				if(visible2) {
-					// ... deflect the light-ray direction accordingly
-					d1 = lensletArrayDeflect(d1, i, principalPoint002, alpha2, period1 + DeltaPeriod, focalLength2);
+					// yes, array 2 is visible
+
+					// calculate the intersection point with that array
+					p = p - d1*(centreOfArray2.z - p.z);
+
+					// does the intersection point lie with in the radius?
+					vec2 r = p.xy - centreOfArray2.xy;
+					float r2 = dot(r, r);	// length squared of vector r
+					if(r2 < radius2*radius2) {
+						// the intersection point lies inside the radius
+
+						// which direction is the ray passing through it?
+						if(d.z < 0.0) {
+							// the ray is passing through the array in the direction for which it is designed; deal with it accordingly
+		
+							// deflect the light-ray direction accordingly
+							d1 = vec3(lensletArrayDeflect(d1.xy, p.xy, centreOfArray2.xy, alpha2, period2, focalLength2), -1.0);
+
+							// lower the brightness factor
+							b *= vec4(0.9, 0.9, 0.9, 1);
+						} else {
+							// the ray is passing through the array in the opposite direction for which it is designed
+							b *= vec4(0.9, 0.1, 0.1, 1);
+						}
+					} 
 				}
 
+				// // if the second array is visible, ...
+				// if(visible2) {
+				// 	// ... calculate the intersection point with that array
+				// 	p = p - d1*(centreOfArray2.z - p.z);
+
+				// 	// does the intersection point lie with in the radius?
+				// 	vec2 r = p.xy - centreOfArray2.xy;
+				// 	float r2 = dot(r, r);	// length squared of vector r
+				// 	if(r2 < radius2*radius2) {
+				// 		// the intersection point lies inside the radius
+
+				// 		// deflect the light-ray direction accordingly
+				// 		d1 = vec3(lensletArrayDeflect(d1.xy, p.xy, centreOfArray2.xy, alpha2, period2, focalLength2), -1.0);
+
+				// 		// lower the brightness factor
+				// 		b = vec4(0.9, 0.9, 0.9, 1)*b;
+				// 	}
+				// }
+
+				// does the ray intersect the (infinitely distant) camera image whose angular width and height is
+				// given by arctan(2*tanHalfFovH) and arctan(2*tanHalfFovV?
 				if((abs(d1.x) < tanHalfFovH) && (abs(d1.y) < tanHalfFovV)) {
-					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d1.x/tanHalfFovH, 0.5-0.5*d1.y/tanHalfFovV));
+					// yes, the ray intersects the image; take the pixel colour from the camera's video feed
+					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5+0.5*d1.x/tanHalfFovH, 0.5+0.5*d1.y/tanHalfFovV));
 				} else {
-					gl_FragColor = vec4(0.53, 0.81, 0.92, 1.0);
-				}
-				gl_FragColor *= vec4(0.9, 0.9, 0.9, 1);
-			}
-			
-		`
-	});
-	const disk = new THREE.Mesh( geometry, lensletArrayShaderMaterial ); 
-	scene.add( disk );
-}
-
-/** create lens object */
-function addBackgroundSphere() {
-	const videoFeedTexture = new THREE.VideoTexture( videoFeed );
-	videoFeedTexture.colorSpace = THREE.SRGBColorSpace;
-
-	// the sphere surrouning the camera in all directions
-	const geometry = 
-		new THREE.SphereGeometry( backgroundSphereRadius );
-	backgroundShaderMaterial = new THREE.ShaderMaterial({
-		side: THREE.DoubleSide,
-		uniforms: { 
-			videoFeedTexture: { value: videoFeedTexture }, 
-			tanHalfFovH: { value: 1.0 },
-			tanHalfFovV: { value: 1.0 }
-		},
-		// wireframe: true,
-		vertexShader: `
-			varying vec3 intersectionPoint;
-
-			void main()	{
-				// projectionMatrix, modelViewMatrix, position -> passed in from Three.js
-				intersectionPoint = position;
-  				gl_Position = projectionMatrix
-					* modelViewMatrix
-					* vec4(position, 1.0);
-			}
-		`,
-		fragmentShader: `
-			precision highp float;
-
-			varying vec3 intersectionPoint;
-			
-			uniform sampler2D videoFeedTexture;
-			uniform float tanHalfFovH;
-			uniform float tanHalfFovV;
-			
-			void main() {
-				// first check which hemisphere we're looking at
-				if(intersectionPoint.z < cameraPosition.z) {
-					// the "forward" hemisphere
-
-					// the camera pinhole is positioned at 
-					//   cameraPosition = (0, 0, cameraLensDistance),
-					// the intersection point is 
-					//   intersectionPoint = (intersectionPoint.x, intersectionPoint.y, 0),
-					// so the "backwards" ray direction from the camera to the intersection point is
-					//   d = intersectionPoint - cameraPosition
-					//     = (intersectionPoint.x, intersectionPoint.y, -cameraLensDistance), 
-					// which, when "normalised" such that its z component = 1, is
-					//   d1 = d / d_z
-					//      = (-intersectionPoint.x/cameraLensDistance, -intersectionPoint.y/cameraLensDistance, 1).
-					vec3 d = intersectionPoint - cameraPosition;
-					vec2 d1 = d.xy/d.z;
-					
-					if((abs(d1.x) < tanHalfFovH) && (abs(d1.y) < tanHalfFovV)) {
-						gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d1.x/tanHalfFovH, 0.5-0.5*d1.y/tanHalfFovV));
+					// no it doesn't; give the pixel a default colour, depending on which hemisphere it points towards
+					if(d.z < 0.0) {
+						gl_FragColor = vec4(0.53, 0.81, 0.92, 1.0);	// sky blue
 					} else {
-						gl_FragColor = vec4(0.53, 0.81, 0.92, 1.0);
+						gl_FragColor = vec4(1, 1, 0, 1.0);	// yellow
 					}
-				} else {
-					// the "backward" hemisphere
-					gl_FragColor = vec4(1, 1, 0, 1);
 				}
+				gl_FragColor *= b;
 			}
-			
 		`
 	});
-	const backgroundSphere = new THREE.Mesh( geometry, backgroundShaderMaterial ); 
-	scene.add( backgroundSphere );
+	const raytracingSphere = new THREE.Mesh( geometry, raytracingSphereShaderMaterial ); 
+	scene.add( raytracingSphere );
 }
 
 // see https://github.com/mrdoob/three.js/blob/master/examples/webgl_animation_skinning_additive_blending.html
@@ -397,17 +429,17 @@ function createGUI() {
 	// gui.hide();
 
 	const params1 = {
-		'Visible': lensletArrayShaderMaterial.uniforms.visible1.value,
-		'Focal length, <i>f</i><sub>1</sub>': lensletArrayShaderMaterial.uniforms.focalLength1.value,
-		'Period, <i>p</i><sub>1</sub>': lensletArrayShaderMaterial.uniforms.period1.value,
-		'Rotation angle (&deg;)': lensletArrayShaderMaterial.uniforms.alpha1.value / Math.PI * 180.
+		'Visible': raytracingSphereShaderMaterial.uniforms.visible1.value,
+		'Focal length, <i>f</i><sub>1</sub>': raytracingSphereShaderMaterial.uniforms.focalLength1.value,
+		'Period, <i>p</i><sub>1</sub>': raytracingSphereShaderMaterial.uniforms.period1.value,
+		'Rotation angle (&deg;)': raytracingSphereShaderMaterial.uniforms.alpha1.value / Math.PI * 180.
 	};
 	const params2 = {
-		'Visible': lensletArrayShaderMaterial.uniforms.visible2.value,
-		'Focal length, <i>f</i><sub>2</sub>': lensletArrayShaderMaterial.uniforms.focalLength2.value,
-		'&Delta;<sub>period</sub>, <i>p</i><sub>2</sub> - <i>p</i><sub>1</sub>': lensletArrayShaderMaterial.uniforms.DeltaPeriod.value,
-		'Rotation angle (&deg;)': lensletArrayShaderMaterial.uniforms.alpha2.value / Math.PI * 180.,
-		'Offset from confocal': lensletArrayShaderMaterial.uniforms.offsetFromConfocal.value
+		'Visible': raytracingSphereShaderMaterial.uniforms.visible2.value,
+		'Focal length, <i>f</i><sub>2</sub>': raytracingSphereShaderMaterial.uniforms.focalLength2.value,
+		'&Delta;<sub>period</sub>, <i>p</i><sub>2</sub> - <i>p</i><sub>1</sub>': deltaPeriod,
+		'Rotation angle (&deg;)': raytracingSphereShaderMaterial.uniforms.alpha2.value / Math.PI * 180.,
+		'Offset from confocal': offsetFromConfocal
 	};
 	const params = {
 		// 'Swap arrays': swapArrays,
@@ -422,18 +454,18 @@ function createGUI() {
 
 	const folderArray1 = gui.addFolder( 'Near lenslet array (in plane <i>z</i><sub>1</sub> = 0)' );
 
-	folderArray1.add( params1, 'Visible').onChange( (v) => { lensletArrayShaderMaterial.uniforms.visible1.value = v; } );
-	folderArray1.add( params1, 'Focal length, <i>f</i><sub>1</sub>', -1, 1).onChange( (f) => { lensletArrayShaderMaterial.uniforms.focalLength1.value = f; } );
-	folderArray1.add( params1, 'Period, <i>p</i><sub>1</sub>', 0.1, 0.5).onChange( (p) => { lensletArrayShaderMaterial.uniforms.period1.value = p; } );
-	folderArray1.add( params1, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { lensletArrayShaderMaterial.uniforms.alpha1.value = alpha/180.0*Math.PI; } );
+	folderArray1.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible1.value = v; } );
+	folderArray1.add( params1, 'Focal length, <i>f</i><sub>1</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength1.value = f; } );
+	folderArray1.add( params1, 'Period, <i>p</i><sub>1</sub>', 0.1, 0.5).onChange( (p) => { raytracingSphereShaderMaterial.uniforms.period1.value = p; } );
+	folderArray1.add( params1, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha1.value = alpha/180.0*Math.PI; } );
 
 	const folderArray2 = gui.addFolder( 'Far lenslet array' );
 
-	folderArray2.add( params1, 'Visible').onChange( (v) => { lensletArrayShaderMaterial.uniforms.visible2.value = v; } );
-	folderArray2.add( params2, 'Focal length, <i>f</i><sub>2</sub>', -1, 1).onChange( (f) => { lensletArrayShaderMaterial.uniforms.focalLength2.value = f; } );
-	folderArray2.add( params2, '&Delta;<sub>period</sub>, <i>p</i><sub>2</sub> - <i>p</i><sub>1</sub>', -0.1, 0.1).onChange( (p) => { lensletArrayShaderMaterial.uniforms.DeltaPeriod.value = p; } );
-	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { lensletArrayShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
-	folderArray2.add( params2, 'Offset from confocal', -0.1, 0.1).onChange( (o) => { lensletArrayShaderMaterial.uniforms.offsetFromConfocal.value = o; } );
+	folderArray2.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible2.value = v; } );
+	folderArray2.add( params2, 'Focal length, <i>f</i><sub>2</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength2.value = f; } );
+	folderArray2.add( params2, '&Delta;<sub>period</sub>, <i>p</i><sub>2</sub> - <i>p</i><sub>1</sub>', -0.1, 0.1).onChange( (p) => { deltaPeriod = p; } );
+	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
+	folderArray2.add( params2, 'Offset from confocal', -0.2, 0.2).onChange( (o) => { offsetFromConfocal = o; } );
 
 
 	const folderSettings = gui.addFolder( 'Other controls' );
@@ -521,27 +553,6 @@ function  pointForward() {
 function onWindowResize() {
 	screenChanged();
 	setInfo(`window size ${window.innerWidth} &times; ${window.innerHeight}`);	// debug
-}
-
-function updateUniforms() {
-	let tanHalfFovH, tanHalfFovV;
-	if(aspectRatioVideoFeed > 1.0) {
-		// horizontal orientation
-		tanHalfFovH = Math.tan(0.5*fovVideoFeed*Math.PI/180.0);
-		tanHalfFovV = Math.tan(0.5*fovVideoFeed*Math.PI/180.0)/aspectRatioVideoFeed;
-		// lensletArrayShaderMaterial.uniforms.tanHalfFovH.value = Math.tan(0.5*fovVideoFeed*Math.PI/180.0);
-		// lensletArrayShaderMaterial.uniforms.tanHalfFovV.value = Math.tan(0.5*fovVideoFeed*Math.PI/180.0)/aspectRatioVideoFeed;
-	} else {
-		// vertical orientation
-		tanHalfFovH = Math.tan(0.5*fovVideoFeed*Math.PI/180.0)*aspectRatioVideoFeed;
-		tanHalfFovV = Math.tan(0.5*fovVideoFeed*Math.PI/180.0);
-		// lensletArrayShaderMaterial.uniforms.tanHalfFovH.value = Math.tan(0.5*fovVideoFeed*Math.PI/180.0)*aspectRatioVideoFeed;
-		// lensletArrayShaderMaterial.uniforms.tanHalfFovV.value = Math.tan(0.5*fovVideoFeed*Math.PI/180.0);
-	}
-	lensletArrayShaderMaterial.uniforms.tanHalfFovH.value = tanHalfFovH;
-	lensletArrayShaderMaterial.uniforms.tanHalfFovV.value = tanHalfFovV;
-	backgroundShaderMaterial.uniforms.tanHalfFovH.value = tanHalfFovH;
-	backgroundShaderMaterial.uniforms.tanHalfFovV.value = tanHalfFovV;
 }
 
 // // see https://developer.mozilla.org/en-US/docs/Web/API/ScreenOrientation/change_event
