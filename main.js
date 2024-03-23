@@ -404,6 +404,7 @@ function createGUI() {
 	};
 	const params = {
 		// 'Swap arrays': swapArrays,
+		'Point forward (in -<b>z</b> direction)': pointForward,
 		'Field of view of screen (&deg;)': fovScreen,
 		'Field of view of camera (&deg;)': fovVideoFeed,
 		'Restart video streams': function() { 
@@ -428,9 +429,10 @@ function createGUI() {
 	folderArray2.add( params2, 'Offset from confocal', -0.1, 0.1).onChange( (o) => { lensletArrayShaderMaterial.uniforms.offsetFromConfocal.value = o; } );
 
 
-	const folderSettings = gui.addFolder( 'Other settings' );
+	const folderSettings = gui.addFolder( 'Other controls' );
 	// folderSettings.add( params, 'Toggle show circles');
 	// folderSettings.add( params, 'Swap arrays' );
+	folderSettings.add( params, 'Point forward (in -<b>z</b> direction)');
 	folderSettings.add( params, 'Field of view of screen (&deg;)', 10, 170, 1).onChange( setScreenFOV );   
 	folderSettings.add( params, 'Field of view of camera (&deg;)', 10, 170, 1).onChange( (fov) => { fovVideoFeed = fov; updateUniforms(); });   
 	folderSettings.add( params, 'Restart video streams');
@@ -498,6 +500,15 @@ function screenChanged() {
 
 	// make sure the camera changes take effect
 	camera.updateProjectionMatrix();
+}
+
+function  pointForward() {
+	let r = camera.position.length();
+	camera.position.x = 0;
+	camera.position.y = 0;
+	camera.position.z = r;
+	controls.update();
+	setInfo('Pointing camera forwards (in -<b>z</b> direction)');
 }
 
 function onWindowResize() {
