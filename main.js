@@ -356,24 +356,31 @@ function addBackgroundSphere() {
 			uniform float tanHalfFovV;
 			
 			void main() {
-				// the camera pinhole is positioned at 
-				//   cameraPosition = (0, 0, cameraLensDistance),
-				// the intersection point is 
-				//   intersectionPoint = (intersectionPoint.x, intersectionPoint.y, 0),
-				// so the "backwards" ray direction from the camera to the intersection point is
-				//   d = intersectionPoint - cameraPosition
-				//     = (intersectionPoint.x, intersectionPoint.y, -cameraLensDistance), 
-				// which, when "normalised" such that its z component = 1, is
-				//   d1 = d / d_z
-				//      = (-intersectionPoint.x/cameraLensDistance, -intersectionPoint.y/cameraLensDistance, 1).
-				vec3 d = intersectionPoint - cameraPosition;
-				vec2 d1 = d.xy/d.z;
-				// vec2 d1 = -d.xy/1000.0;
-				
-				if((abs(d1.x) < tanHalfFovH) && (abs(d1.y) < tanHalfFovV)) {
-					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d1.x/tanHalfFovH, 0.5-0.5*d1.y/tanHalfFovV));
+				// first check which hemisphere we're looking at
+				if(intersectionPoint.z < cameraPosition.z) {
+					// the "forward" hemisphere
+
+					// the camera pinhole is positioned at 
+					//   cameraPosition = (0, 0, cameraLensDistance),
+					// the intersection point is 
+					//   intersectionPoint = (intersectionPoint.x, intersectionPoint.y, 0),
+					// so the "backwards" ray direction from the camera to the intersection point is
+					//   d = intersectionPoint - cameraPosition
+					//     = (intersectionPoint.x, intersectionPoint.y, -cameraLensDistance), 
+					// which, when "normalised" such that its z component = 1, is
+					//   d1 = d / d_z
+					//      = (-intersectionPoint.x/cameraLensDistance, -intersectionPoint.y/cameraLensDistance, 1).
+					vec3 d = intersectionPoint - cameraPosition;
+					vec2 d1 = d.xy/d.z;
+					
+					if((abs(d1.x) < tanHalfFovH) && (abs(d1.y) < tanHalfFovV)) {
+						gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d1.x/tanHalfFovH, 0.5-0.5*d1.y/tanHalfFovV));
+					} else {
+						gl_FragColor = vec4(0.53, 0.81, 0.92, 1.0);
+					}
 				} else {
-					gl_FragColor = vec4(0.53, 0.81, 0.92, 1.0);
+					// the "backward" hemisphere
+					gl_FragColor = vec4(1, 1, 0, 1);
 				}
 			}
 			
@@ -427,6 +434,7 @@ function createGUI() {
 	folderArray2.add( params2, '&Delta;<sub>period</sub>, <i>p</i><sub>2</sub> - <i>p</i><sub>1</sub>', -0.1, 0.1).onChange( (p) => { lensletArrayShaderMaterial.uniforms.DeltaPeriod.value = p; } );
 	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { lensletArrayShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
 	folderArray2.add( params2, 'Offset from confocal', -0.1, 0.1).onChange( (o) => { lensletArrayShaderMaterial.uniforms.offsetFromConfocal.value = o; } );
+
 
 	const folderSettings = gui.addFolder( 'Other controls' );
 	// folderSettings.add( params, 'Toggle show circles');
