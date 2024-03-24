@@ -166,7 +166,7 @@ function updateUniforms() {
 		offsetFromConfocal;
 	// arrange them symmetrically around z=0
 	raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z = +0.5*s;
-	raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z = -0.5*s - 0.001;
+	raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z = -0.5*s;	// - 0.0001;
 
 	// set the array periods
 	raytracingSphereShaderMaterial.uniforms.period2.value = raytracingSphereShaderMaterial.uniforms.period1.value + deltaPeriod;
@@ -255,7 +255,7 @@ function addRaytracingSphere() {
 			visible2: { value: true },
 			period2: { value: 0.4 },
 			alpha2: { value: 0 },
-			focalLength2: { value: -1.0 },
+			focalLength2: { value: -0.5 },
 			centreOfArray2: { value: new THREE.Vector3(0, 0, 0) },	// principal point of lenslet (0, 0)
 			radius2: { value: 5.0 },	// radius of array 2
 			videoFeedUTexture: { value: videoFeedUTexture }, 
