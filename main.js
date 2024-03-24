@@ -20,15 +20,17 @@ import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 let scene;
-let aspectRatioVideoFeed = 4.0/3.0;
+let aspectRatioVideoFeedU = 4.0/3.0;
+let aspectRatioVideoFeedE = 4.0/3.0;
 let renderer;
-let videoFeed;
+let videoFeedU, videoFeedE;	// feeds from user/environment-facing cameras
 let camera;
 let controls;
 let raytracingSphereShaderMaterial;
 	
 // Nokia HR20, according to https://www.camerafv5.com/devices/manufacturers/hmd_global/nokia_xr20_ttg_0/
-let fovVideoFeed = 68;	// (environment-facing) camera
+let fovVideoFeedU = 67.3;	// (user-facing) camera
+let fovVideoFeedE = 68.3;	// (environment-facing) camera
 let fovScreen = 68;
 
 let cameraLensDistance = 10.0;
@@ -37,8 +39,8 @@ let offsetFromConfocal = 0.0;
 let deltaPeriod = 0.0;
 
 // the info text area
-let info = document.createElement('div');
-let infotime;	// the time the last info was posted
+let status = document.createElement('div');
+let statusTime;	// the time the last info was posted
 
 let gui;
 
@@ -56,7 +58,7 @@ animate();
 
 function init() {
 	// create the info element first so that any problems can be communicated
-	createInfo();
+	createStatus();
 
 	scene = new THREE.Scene();
 	// scene.background = new THREE.Color( 'skyblue' );
@@ -71,7 +73,7 @@ function init() {
 	document.body.appendChild( renderer.domElement );
 	// document.getElementById('livePhoto').appendChild( renderer.domElement );
 
-	createVideoFeed();
+	createVideoFeeds();
 
 	addRaytracingSphere();
 
@@ -109,7 +111,7 @@ function init() {
 	showingStoredPhoto = false;
 
 	// handle screen-orientation (landscape/portrait) change
-	screen.orientation.addEventListener("change", recreateVideoFeed);
+	screen.orientation.addEventListener( "change", recreateVideoFeeds );
 
 	addOrbitControls();
 
@@ -129,18 +131,33 @@ function animate() {
 }
 
 function updateUniforms() {
-	let tanHalfFovH, tanHalfFovV;
-	if(aspectRatioVideoFeed > 1.0) {
+	// the tangents for the environment-facing camera video feed
+	let tanHalfFovHE, tanHalfFovVE;
+	if(aspectRatioVideoFeedE > 1.0) {
 		// horizontal orientation
-		tanHalfFovH = Math.tan(0.5*fovVideoFeed*Math.PI/180.0);
-		tanHalfFovV = Math.tan(0.5*fovVideoFeed*Math.PI/180.0)/aspectRatioVideoFeed;
+		tanHalfFovHE = Math.tan(0.5*fovVideoFeedE*Math.PI/180.0);
+		tanHalfFovVE = Math.tan(0.5*fovVideoFeedE*Math.PI/180.0)/aspectRatioVideoFeedE;
 	} else {
 		// vertical orientation
-		tanHalfFovH = Math.tan(0.5*fovVideoFeed*Math.PI/180.0)*aspectRatioVideoFeed;
-		tanHalfFovV = Math.tan(0.5*fovVideoFeed*Math.PI/180.0);
+		tanHalfFovHE = Math.tan(0.5*fovVideoFeedE*Math.PI/180.0)*aspectRatioVideoFeedE;
+		tanHalfFovVE = Math.tan(0.5*fovVideoFeedE*Math.PI/180.0);
 	}
-	raytracingSphereShaderMaterial.uniforms.tanHalfFovH.value = tanHalfFovH;
-	raytracingSphereShaderMaterial.uniforms.tanHalfFovV.value = tanHalfFovV;
+	raytracingSphereShaderMaterial.uniforms.tanHalfFovHE.value = tanHalfFovHE;
+	raytracingSphereShaderMaterial.uniforms.tanHalfFovVE.value = tanHalfFovVE;
+
+	// the tangents for the user-facing camera video feed
+	let tanHalfFovHU, tanHalfFovVU;
+	if(aspectRatioVideoFeedU > 1.0) {
+		// horizontal orientation
+		tanHalfFovHU = Math.tan(0.5*fovVideoFeedU*Math.PI/180.0);
+		tanHalfFovVU = Math.tan(0.5*fovVideoFeedU*Math.PI/180.0)/aspectRatioVideoFeedU;
+	} else {
+		// vertical orientation
+		tanHalfFovHU = Math.tan(0.5*fovVideoFeedU*Math.PI/180.0)*aspectRatioVideoFeedU;
+		tanHalfFovVU = Math.tan(0.5*fovVideoFeedU*Math.PI/180.0);
+	}
+	raytracingSphereShaderMaterial.uniforms.tanHalfFovHU.value = tanHalfFovHU;
+	raytracingSphereShaderMaterial.uniforms.tanHalfFovVU.value = tanHalfFovVU;
 
 	// calculate the separation between the two arrays, s = f1 + f2 + offsetFromConfocal
 	let s = 
@@ -155,41 +172,72 @@ function updateUniforms() {
 	raytracingSphereShaderMaterial.uniforms.period2.value = raytracingSphereShaderMaterial.uniforms.period1.value + deltaPeriod;
 }
 
-function createVideoFeed() {
-	videoFeed = document.getElementById( 'videoFeed' );
+function createVideoFeeds() {
+	videoFeedE = document.getElementById( 'videoFeedE' );
 
 	// see https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_video_webcam.html
 	if ( navigator.mediaDevices && navigator.mediaDevices.getUserMedia ) {
 		// environment-facing camera
-		const constraints = { video: { 
+		const constraintsE = { video: { 
 			// 'deviceId': cameraId,	// this could be the device ID selected 
 			width: {ideal: 1280},	// {ideal: 10000}, 
 			// height: {ideal: 10000}, 
 			facingMode: {ideal: 'environment'}
 			// aspectRatio: { exact: width / height }
 		} };
-		navigator.mediaDevices.getUserMedia( constraints ).then( function ( stream ) {
+		navigator.mediaDevices.getUserMedia( constraintsE ).then( function ( stream ) {
 			// apply the stream to the video element used in the texture
-			videoFeed.srcObject = stream;
-			videoFeed.play();
+			videoFeedE.srcObject = stream;
+			videoFeedE.play();
 
-			videoFeed.addEventListener("playing", () => {
-				aspectRatioVideoFeed = videoFeed.videoWidth / videoFeed.videoHeight;
+			videoFeedE.addEventListener("playing", () => {
+				aspectRatioVideoFeedE = videoFeedE.videoWidth / videoFeedE.videoHeight;
 				updateUniforms();
-				setInfo(`Camera resolution ${videoFeed.videoWidth} &times; ${videoFeed.videoHeight}`);
+				setStatus(`Environment-facing(?) camera resolution ${videoFeedE.videoWidth} &times; ${videoFeedE.videoHeight}`);
 			});
 		} ).catch( function ( error ) {
-			setInfo(`Unable to access camera/webcam (Error: ${error})`);
+			setStatus(`Unable to access environment-facing camera/webcam (Error: ${error})`);
 		} );
 	} else {
-		setInfo( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
+		setStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
+	}
+
+	videoFeedU = document.getElementById( 'videoFeedU' );
+
+	// see https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_video_webcam.html
+	if ( navigator.mediaDevices && navigator.mediaDevices.getUserMedia ) {
+		// user-facing camera
+		const constraintsU = { video: { 
+			// 'deviceId': cameraId,	// this could be the device ID selected 
+			width: {ideal: 1280},	// {ideal: 10000}, 
+			// height: {ideal: 10000}, 
+			facingMode: {ideal: 'user'}
+			// aspectRatio: { exact: width / height }
+		} };
+		navigator.mediaDevices.getUserMedia( constraintsU ).then( function ( stream ) {
+			// apply the stream to the video element used in the texture
+			videoFeedU.srcObject = stream;
+			videoFeedU.play();
+
+			videoFeedU.addEventListener("playing", () => {
+				aspectRatioVideoFeedU = videoFeedU.videoWidth / videoFeedU.videoHeight;
+				updateUniforms();
+				setStatus(`User-facing(?) camera resolution ${videoFeedU.videoWidth} &times; ${videoFeedU.videoHeight}`);
+			});
+		} ).catch( function ( error ) {
+			setStatus(`Unable to access user-facing camera/webcam (Error: ${error})`);
+		} );
+	} else {
+		setStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
 	}
 }
 
 /** create raytracing phere */
 function addRaytracingSphere() {
-	const videoFeedTexture = new THREE.VideoTexture( videoFeed );
-	videoFeedTexture.colorSpace = THREE.SRGBColorSpace;
+	const videoFeedUTexture = new THREE.VideoTexture( videoFeedU );
+	const videoFeedETexture = new THREE.VideoTexture( videoFeedE );
+	videoFeedUTexture.colorSpace = THREE.SRGBColorSpace;
+	videoFeedETexture.colorSpace = THREE.SRGBColorSpace;
 
 	// the sphere surrouning the camera in all directions
 	const geometry = 
@@ -210,10 +258,13 @@ function addRaytracingSphere() {
 			focalLength2: { value: -1.0 },
 			centreOfArray2: { value: new THREE.Vector3(0, 0, 0) },	// principal point of lenslet (0, 0)
 			radius2: { value: 5.0 },	// radius of array 2
-			videoFeedTexture: { value: videoFeedTexture }, 
+			videoFeedUTexture: { value: videoFeedUTexture }, 
+			videoFeedETexture: { value: videoFeedETexture }, 
 			// cameraLensDistance: { value: cameraLensDistance },
-			tanHalfFovH: { value: 1.0 },
-			tanHalfFovV: { value: 1.0 }
+			tanHalfFovHU: { value: 1.0 },
+			tanHalfFovVU: { value: 1.0 },
+			tanHalfFovHE: { value: 1.0 },
+			tanHalfFovVE: { value: 1.0 }
 		},
 		vertexShader: `
 			varying vec3 intersectionPoint;
@@ -230,8 +281,6 @@ function addRaytracingSphere() {
 			precision highp float;
 
 			varying vec3 intersectionPoint;
-			// uniform float cameraLensDistance;
-			// uniform vec3 cameraPosition;
 			
 			// lenslet array 1
 			uniform bool visible1;
@@ -241,9 +290,6 @@ function addRaytracingSphere() {
 			uniform vec3 centreOfArray1;	// centre of array 1,  and principal point of lenslet (0, 0)
 			uniform float radius1;	// radius of array 1
 
-			// uniform float deltaZ12;	// z separation between arrays 1 and 2
-			// uniform float offsetFromConfocal;	// offset from confocal configuration
-
 			// lenslet array 2
 			uniform bool visible2;
 			uniform float alpha2;	// rotation angle of array 2
@@ -252,10 +298,16 @@ function addRaytracingSphere() {
 			uniform vec3 centreOfArray2;	// centre of array 2,  and principal point of lenslet (0, 0)
 			uniform float radius2;	// radius of array 2
 
-			uniform sampler2D videoFeedTexture;
-			uniform float tanHalfFovH;
-			uniform float tanHalfFovV;
-			
+			// video feed from user-facing camera
+			uniform sampler2D videoFeedUTexture;
+			uniform float tanHalfFovHU;
+			uniform float tanHalfFovVU;
+
+			// video feed from environment-facing camera
+			uniform sampler2D videoFeedETexture;
+			uniform float tanHalfFovHE;
+			uniform float tanHalfFovVE;
+
 			// rotate the 2D vector v by the angle alpha (in radians)
 			// from https://gist.github.com/yiwenl/3f804e80d0930e34a0b33359259b556c
 			vec2 rotate(vec2 v, float alpha) {
@@ -276,6 +328,43 @@ function addRaytracingSphere() {
 			vec2 lensDeflect(vec2 d, vec2 r, float f) {
 				// dPrime propto d/d_z - r/f, where r = I-P, and I = intersection point, P = principal point
 				return d - r/f;
+			}
+
+			// Pass the current ray (start point p, direction d, brightness factor b) through (or around) a lens.
+			// The (ideal thin) lens, of focal length f, is in a z plane through centreOfLens.
+			// It is circular, with the given radius, centred on centreOfLenss.
+			void passThroughLens(
+				inout vec3 p, 
+				inout vec3 d, 
+				inout vec4 b,
+				vec3 centreOfLens, 
+				float radius,
+				float focalLength
+			) {
+				// "normalised" version of d, scaled such that the z component is 1
+				vec3 d1 = d/d.z;
+
+				// calculate the intersection point with the lens
+				float deltaZ = centreOfLens.z - p.z;
+				p = p + d1*deltaZ;
+
+				if(deltaZ*d.z < 0.0) {
+					// the ray actually has to travel *backwards* -- make the lens red
+					b *= vec4(0.7, 0.3, 0.3, 1);
+				}
+
+				// does the intersection point lie with in the radius?
+				vec2 r = p.xy - centreOfLens.xy;
+				float r2 = dot(r, r);	// length squared of vector r
+				if(r2 < radius*radius) {
+					// the intersection point lies inside the radius, so the lens does something to the ray
+
+					// deflect the light-ray direction accordingly and make sure that the sign of the z component remains the same
+					d = vec3(lensDeflect(-d1.xy, r, focalLength), sign(d.z));
+
+					// lower the brightness factor, giving the light a blue tinge
+					b *= vec4(0.9, 0.9, 0.99, 1);
+				} 
 			}
 
 			float findLensletCentreCoordinate(float u, float uPeriod) {
@@ -321,7 +410,10 @@ function addRaytracingSphere() {
 				float period,
 				float focalLength
 			) {
-				// "normalised" version of d, scaled such that the z component is 1
+				// transverse part of d, "normalised" such that abs(d.z) = 1
+				vec2 d2 = d.xy / abs(d.z);
+
+				// "normalised" version of d, scaled such that the z component is +1
 				vec3 d1 = d/d.z;
 
 				// calculate the intersection point with that array
@@ -334,20 +426,18 @@ function addRaytracingSphere() {
 				if(r2 < radius*radius) {
 					// the intersection point lies inside the radius, so the component does something to the ray
 
-					// which direction is the ray passing through it?
-					if(d.z < 0.0) {
-						// the ray is passing through array 1 in the direction for which it is designed; deal with it accordingly
-	
-						// deflect the light-ray direction accordingly and make sure that the sign of the z component remains the same
-						d = vec3(lensletArrayDeflect(-d1.xy, p.xy, centreOfArray.xy, alpha, period, focalLength), sign(d.z));
-						// d = d.z*d1;
+					// deflect the light-ray direction accordingly and make sure that the sign of the z component remains the same
+					d = vec3(lensletArrayDeflect(d2, p.xy, centreOfArray.xy, alpha, period, focalLength), sign(d.z));
 
-						// lower the brightness factor, giving the light a blue tinge
-						b *= vec4(0.9, 0.9, 0.99, 1);
-					} else {
-						// the ray is passing through array 1 in the opposite direction for which it is designed
-						b *= vec4(0.7, 0.3, 0.3, 1);
-					}
+					// // which direction is the ray passing through it?
+					// if(d.z < 0.0) {
+					// 	// the ray is passing through array 1 in the direction for which it is designed; deal with it accordingly
+					// lower the brightness factor, giving the light a blue tinge
+					b *= vec4(0.9, 0.9, 0.99, 1);
+					// } else {
+					// 	// the ray is passing through the array in the opposite direction for which it is designed; make it red
+					// 	b *= vec4(0.7, 0.3, 0.3, 1);
+					// }
 				
 					if(deltaZ*d.z < 0.0) {
 						// the ray actually has to travel *backwards* -- make the array red
@@ -370,18 +460,25 @@ function addRaytracingSphere() {
 				// current brightness factor; this will multiply the colour at the end
 				vec4 b = vec4(1.0, 1.0, 1.0, 1.0);
 
-				// is the first array visible?
-				if(visible1) passThroughLensletArray(p, d, b, centreOfArray1,  radius1, alpha1, period1, focalLength1);
-
-				// is the second array visible?
-				if(visible2) passThroughLensletArray(p, d, b, centreOfArray2,  radius2, alpha2, period2, focalLength2);
+				if(d.z < 0.0) {
+					// the ray is travelling "forwards", in the (-z) direction
+					if(visible1) passThroughLensletArray(p, d, b, centreOfArray1,  radius1, alpha1, period1, focalLength1);
+					if(visible2) passThroughLensletArray(p, d, b, centreOfArray2,  radius2, alpha2, period2, focalLength2);
+					// if(visible1) passThroughLens(p, d, b, centreOfArray1,  radius1, focalLength1);
+					// if(visible2) passThroughLens(p, d, b, centreOfArray2,  radius2, focalLength2);
+				} else {
+					// the ray is travelling "backwards", in the (+z) direction
+					if(visible2) passThroughLensletArray(p, d, b, centreOfArray2,  radius2, alpha2, period2, focalLength2);
+					if(visible1) passThroughLensletArray(p, d, b, centreOfArray1,  radius1, alpha1, period1, focalLength1);
+				}
 
 				// does the ray intersect the (infinitely distant) camera image whose angular width and height is
 				// given by arctan(2*tanHalfFovH) and arctan(2*tanHalfFovV?
 				vec3 d1 = d/d.z;
-				if((abs(d1.x) < tanHalfFovH) && (abs(d1.y) < tanHalfFovV)) {
+				if((abs(d1.x) < tanHalfFovHE) && (abs(d1.y) < tanHalfFovVE)) {
 					// yes, the ray intersects the image; take the pixel colour from the camera's video feed
-					gl_FragColor = texture2D(videoFeedTexture, vec2(0.5-0.5*d1.x/tanHalfFovH, 0.5-0.5*d1.y/tanHalfFovV));
+					if(d.z < 0.0) gl_FragColor = texture2D(videoFeedETexture, vec2(0.5-0.5*d1.x/tanHalfFovHE, 0.5-0.5*d1.y/tanHalfFovVE));
+					else gl_FragColor = texture2D(videoFeedUTexture, vec2(0.5+0.5*d1.x/tanHalfFovHU, 0.5+0.5*d1.y/tanHalfFovVU));
 				} else {
 					// no it doesn't; give the pixel a default colour, depending on which hemisphere it points towards
 					if(d.z < 0.0) {
@@ -419,12 +516,13 @@ function createGUI() {
 	};
 	const params = {
 		// 'Swap arrays': swapArrays,
-		'Point forward (in -<b>z</b> direction)': pointForward,
-		'Field of view of screen (&deg;)': fovScreen,
-		'Field of view of camera (&deg;)': fovVideoFeed,
+		'screen (&deg;)': fovScreen,
+		'env.-facing cam. (&deg;)': fovVideoFeedE,
+		'user-facing cam. (&deg;)': fovVideoFeedU,
+		'Point (virtual) cam. forward (in -<b>z</b> direction)': pointForward,
 		'Restart video streams': function() { 
 			recreateVideoFeed(); 
-			setInfo("Restarting video stream");
+			setStatus("Restarting video stream");
 		}
 	}
 
@@ -443,13 +541,14 @@ function createGUI() {
 	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
 	folderArray2.add( params2, 'Offset from confocal', -0.25, 0.25).onChange( (o) => { offsetFromConfocal = o; } );
 
+	const folderFOV = gui.addFolder( 'Fields of view' );
+	folderFOV.add( params, 'screen (&deg;)', 10, 170, 1).onChange( setScreenFOV );
+	folderFOV.add( params, 'env.-facing cam. (&deg;)', 10, 170, 1).onChange( (fov) => { fovVideoFeedE = fov; updateUniforms(); });   
+	folderFOV.add( params, 'user-facing cam. (&deg;)', 10, 170, 1).onChange( (fov) => { fovVideoFeedU = fov; updateUniforms(); });   
+	folderFOV.close();
 
 	const folderSettings = gui.addFolder( 'Other controls' );
-	// folderSettings.add( params, 'Toggle show circles');
-	// folderSettings.add( params, 'Swap arrays' );
-	folderSettings.add( params, 'Point forward (in -<b>z</b> direction)');
-	folderSettings.add( params, 'Field of view of screen (&deg;)', 10, 170, 1).onChange( setScreenFOV );   
-	folderSettings.add( params, 'Field of view of camera (&deg;)', 10, 170, 1).onChange( (fov) => { fovVideoFeed = fov; updateUniforms(); });   
+	folderSettings.add( params, 'Point (virtual) cam. forward (in -<b>z</b> direction)');
 	folderSettings.add( params, 'Restart video streams');
 	folderSettings.close();
 }
@@ -523,21 +622,22 @@ function  pointForward() {
 	camera.position.y = 0;
 	camera.position.z = r;
 	controls.update();
-	setInfo('Pointing camera forwards (in -<b>z</b> direction)');
+	setStatus('Pointing camera forwards (in -<b>z</b> direction)');
 }
 
 function onWindowResize() {
 	screenChanged();
-	setInfo(`window size ${window.innerWidth} &times; ${window.innerHeight}`);	// debug
+	setStatus(`window size ${window.innerWidth} &times; ${window.innerHeight}`);	// debug
 }
 
 // // see https://developer.mozilla.org/en-US/docs/Web/API/ScreenOrientation/change_event
-function recreateVideoFeed() {
-	// stop current video stream...
-	videoFeed.srcObject.getTracks().forEach(function(track) { track.stop(); });
+function recreateVideoFeeds() {
+	// stop current video streams...
+	videoFeedE.srcObject.getTracks().forEach(function(track) { track.stop(); });
+	videoFeedU.srcObject.getTracks().forEach(function(track) { track.stop(); });
 
-	// ... and re-create a new one, hopefully of the appropriate size
-	createVideoFeed();
+	// ... and re-create new ones, hopefully of the appropriate size
+	createVideoFeeds();
 }
 
 function addOrbitControls() {
@@ -548,7 +648,7 @@ function addOrbitControls() {
 	controls.listenToKeyEvents( window ); // optional
 
 	//controls.addEventListener( 'change', render ); // call this only in static scenes (i.e., if there is no animation loop)
-	controls.addEventListener( 'change', () => { setInfo(`Camera position (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`)} );
+	controls.addEventListener( 'change', () => { setStatus(`Camera position (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`)} );
 
 	controls.enableDamping = false; // an animation loop is required when either damping or auto-rotation are enabled
 	controls.dampingFactor = 0.05;
@@ -567,7 +667,7 @@ function addOrbitControls() {
 async function toggleFullscreen() {
 	if (!document.fullscreenElement) {
 		document.documentElement.requestFullscreen().catch((err) => {
-			setInfo(
+			setStatus(
 				`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`,
 			);
 		});
@@ -590,7 +690,7 @@ function showStoredPhoto() {
 	document.getElementById('storedPhoto').style.visibility = "visible";
 	showingStoredPhoto = true;
 
-	setInfo('Showing stored photo, '+storedPhotoDescription);
+	setStatus('Showing stored photo, '+storedPhotoDescription);
 }
 
 function showLivePhoto() {
@@ -605,7 +705,7 @@ function showLivePhoto() {
 	document.getElementById('storedPhoto').style.visibility = "hidden";
 	showingStoredPhoto = false;
 
-	setInfo('Showing live image');
+	setStatus('Showing live image');
 }
 
 function deleteStoredPhoto() {
@@ -613,7 +713,7 @@ function deleteStoredPhoto() {
 
 	showLivePhoto();
 
-	setInfo('Stored photo deleted; showing live image');
+	setStatus('Stored photo deleted; showing live image');
 }
 
 function takePhoto() {
@@ -628,7 +728,7 @@ function takePhoto() {
 		document.getElementById('storedPhotoThumbnail').src=storedPhoto;
 		document.getElementById('storedPhotoThumbnail').style.visibility = "visible";
 	
-		setInfo('Photo taken; click thumbnail to view and share');
+		setStatus('Photo taken; click thumbnail to view and share');
 	} catch (error) {
 		console.error('Error:', error);
 	}	
@@ -648,12 +748,12 @@ async function share() {
 					files: [file],
 				});
 			} else {
-				setInfo('Sharing is not supported by this browser.');
+				setStatus('Sharing is not supported by this browser.');
 			}	
 		})
 		.catch(error => {
 			console.error('Error:', error);
-			setInfo(`Error: ${error}`);
+			setStatus(`Error: ${error}`);
 		});
 	} catch (error) {
 		console.error('Error:', error);
@@ -663,14 +763,44 @@ async function share() {
 /** 
  * Add a text field to the bottom left corner of the screen
  */
+function createStatus() {
+	// see https://stackoverflow.com/questions/15248872/dynamically-create-2d-text-in-three-js
+	status.style.position = 'absolute';
+	status.style.backgroundColor = "rgba(0, 0, 0, 0.3)";	// semi-transparent black
+	status.style.color = "White";
+	status.style.fontFamily = "Arial";
+	status.style.fontSize = "9pt";
+	setStatus("Welcome!");
+	status.style.bottom = 0 + 'px';
+	status.style.left = 0 + 'px';
+	status.style.zIndex = 1;
+	document.body.appendChild(status);	
+}
+
+function setStatus(text) {
+	status.innerHTML = '&nbsp;'+text;
+	console.log(text);
+
+	// show the text only for 3 seconds
+	statusTime = new Date().getTime();
+	setTimeout( () => { if(new Date().getTime() - statusTime > 2999) status.innerHTML = `&nbsp;LensletLegend, University of Glasgow, <a href="https://github.com/jkcuk/LensletLegend">https://github.com/jkcuk/LensletLegend</a>` }, 3000);
+}
+
+function showInfo() {
+	setInfo(`camera position = ${camera.position}`);
+}
+
+/** 
+ * Add a text field to the top left corner of the screen
+ */
 function createInfo() {
 	// see https://stackoverflow.com/questions/15248872/dynamically-create-2d-text-in-three-js
 	info.style.position = 'absolute';
-	info.style.backgroundColor = "rgba(0, 0, 0, 0.5)";	// semi-transparent white
+	info.style.backgroundColor = "rgba(0, 0, 0, 0.3)";	// semi-transparent black
 	info.style.color = "White";
 	info.style.fontFamily = "Arial";
 	info.style.fontSize = "9pt";
-	setInfo("Welcome!");
+	setInfo("");
 	info.style.bottom = 0 + 'px';
 	info.style.left = 0 + 'px';
 	info.style.zIndex = 1;
@@ -678,10 +808,10 @@ function createInfo() {
 }
 
 function setInfo(text) {
-	info.innerHTML = text;
+	info.innerHTML = '&nbsp;'+text;
 	console.log(text);
 
 	// show the text only for 3 seconds
-	infotime = new Date().getTime();
-	setTimeout( () => { if(new Date().getTime() - infotime > 2999) info.innerHTML = `LensletLegend, University of Glasgow, <a href="https://github.com/jkcuk/LensletLegend">https://github.com/jkcuk/LensletLegend</a>` }, 3000);
+	infoTime = new Date().getTime();
+	setTimeout( () => { if(new Date().getTime() - infoTime > 2999) info.innerHTML = `` }, 3000);
 }
