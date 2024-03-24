@@ -14,7 +14,7 @@
 
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
-import * as THREE from 'three';
+import * as THREE from 'three'; 
 
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
