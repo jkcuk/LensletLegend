@@ -485,7 +485,7 @@ function addRaytracingSphere() {
 					// backwards-facing ray
 					if((abs(d1.x) < tanHalfFovHU) && (abs(d1.y) < tanHalfFovVU))
 						// yes, the ray intersects the image; take the pixel colour from the camera's video feed
-						gl_FragColor = texture2D(videoFeedUTexture, vec2(0.5+0.5*d1.x/tanHalfFovHU, 0.5+0.5*d1.y/tanHalfFovVU));
+						gl_FragColor = texture2D(videoFeedUTexture, vec2(0.5-0.5*d1.x/tanHalfFovHU, 0.5+0.5*d1.y/tanHalfFovVU));
 					else gl_FragColor = vec4(1, 0, 0, 1.0);	// red
 				}
 
