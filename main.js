@@ -482,9 +482,9 @@ function addRaytracingSphere() {
 				} else {
 					// no it doesn't; give the pixel a default colour, depending on which hemisphere it points towards
 					if(d.z < 0.0) {
-						gl_FragColor = vec4(0.53, 0.81, 0.92, 1.0);	// sky blue
+						gl_FragColor = vec4(1, 1, 1, 1.0);	// white
 					} else {
-						gl_FragColor = vec4(1, 1, 0, 1.0);	// yellow
+						gl_FragColor = vec4(1, 0, 0, 1.0);	// red
 					}
 				}
 				gl_FragColor *= b;
