@@ -14,7 +14,7 @@
 
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
-import * as THREE from 'three'; 
+import * as THREE from 'three';
 
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -173,35 +173,9 @@ function updateUniforms() {
 }
 
 function createVideoFeeds() {
-	videoFeedE = document.getElementById( 'videoFeedE' );
-
-	// see https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_video_webcam.html
-	if ( navigator.mediaDevices && navigator.mediaDevices.getUserMedia ) {
-		// environment-facing camera
-		const constraintsE = { video: { 
-			// 'deviceId': cameraId,	// this could be the device ID selected 
-			width: {ideal: 1280},	// {ideal: 10000}, 
-			// height: {ideal: 10000}, 
-			facingMode: {ideal: 'environment'}
-			// aspectRatio: { exact: width / height }
-		} };
-		navigator.mediaDevices.getUserMedia( constraintsE ).then( function ( stream ) {
-			// apply the stream to the video element used in the texture
-			videoFeedE.srcObject = stream;
-			videoFeedE.play();
-
-			videoFeedE.addEventListener("playing", () => {
-				aspectRatioVideoFeedE = videoFeedE.videoWidth / videoFeedE.videoHeight;
-				updateUniforms();
-				setStatus(`Environment-facing(?) camera resolution ${videoFeedE.videoWidth} &times; ${videoFeedE.videoHeight}`);
-			});
-		} ).catch( function ( error ) {
-			setStatus(`Unable to access environment-facing camera/webcam (Error: ${error})`);
-		} );
-	} else {
-		setStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
-	}
-
+	// create the video stream for the user-facing camera first, as some devices (such as my iPad), which have both cameras,
+	// but can (for whatever reason) only have a video feed from one at a time, seem to go with the video stream that was
+	// created last, and as the standard view is looking "forward" it is preferable to see the environment-facing camera.
 	videoFeedU = document.getElementById( 'videoFeedU' );
 
 	// see https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_video_webcam.html
@@ -226,6 +200,35 @@ function createVideoFeeds() {
 			});
 		} ).catch( function ( error ) {
 			setStatus(`Unable to access user-facing camera/webcam (Error: ${error})`);
+		} );
+	} else {
+		setStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
+	}
+
+	videoFeedE = document.getElementById( 'videoFeedE' );
+
+	// see https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_video_webcam.html
+	if ( navigator.mediaDevices && navigator.mediaDevices.getUserMedia ) {
+		// environment-facing camera
+		const constraintsE = { video: { 
+			// 'deviceId': cameraId,	// this could be the device ID selected 
+			width: {ideal: 1280},	// {ideal: 10000}, 
+			// height: {ideal: 10000}, 
+			facingMode: {ideal: 'environment'}
+			// aspectRatio: { exact: width / height }
+		} };
+		navigator.mediaDevices.getUserMedia( constraintsE ).then( function ( stream ) {
+			// apply the stream to the video element used in the texture
+			videoFeedE.srcObject = stream;
+			videoFeedE.play();
+
+			videoFeedE.addEventListener("playing", () => {
+				aspectRatioVideoFeedE = videoFeedE.videoWidth / videoFeedE.videoHeight;
+				updateUniforms();
+				setStatus(`Environment-facing(?) camera resolution ${videoFeedE.videoWidth} &times; ${videoFeedE.videoHeight}`);
+			});
+		} ).catch( function ( error ) {
+			setStatus(`Unable to access environment-facing camera/webcam (Error: ${error})`);
 		} );
 	} else {
 		setStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
