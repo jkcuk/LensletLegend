@@ -555,7 +555,7 @@ function createGUI() {
 		}
 	}
 
-	const folderArray1 = gui.addFolder( 'Lenslet array 1 (near; in plane <i>z</i><sub>1</sub> = 0)' );
+	const folderArray1 = gui.addFolder( 'Lenslet array 1 (near; <i>z</i> = 0)' );
 
 	folderArray1.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible1.value = v; } );
 	folderArray1.add( params1, 'Focal length, <i>f</i><sub>1</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength1.value = f; } );
@@ -829,11 +829,11 @@ function getInfoString() {
 		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.x.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.y.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z.toFixed(4)})<br>` +
 		`Lenslet array 2 (the farther array, when seen in "forward" direction)<br>` +
 		`&nbsp;&nbsp;Visible = ${raytracingSphereShaderMaterial.uniforms.visible2.value}<br>` +
-		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toFixed(4)} (&Delta;period = ${deltaPeriod.toFixed(4)})<br>` +
+		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toFixed(4)} (&Delta;<sub>period</sub> = ${deltaPeriod.toFixed(4)})<br>` +
 		`&nbsp;&nbsp;Rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha2.value.toFixed(4)}&deg;<br>` +
 		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength2.value.toFixed(4)}<br>` +
 		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius2.value.toFixed(4)}<br>` +
-		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z.toFixed(4)}) (offset from confocal = ${offsetFromConfocal})<br>` +
+		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z.toFixed(4)}) (offset from confocal = ${offsetFromConfocal.toFixed(4)})<br>` +
 		`Camera position = (${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)})<br>` +
 		`Horiz. FOV of user-facing(?) camera = ${fovVideoFeedU.toFixed(4)}&deg;<br>` +	// (user-facing) camera
 		`Horiz. FOV of environment-facing(?) camera = ${fovVideoFeedE.toFixed(4)}&deg;<br>` +	// (environment-facing) camera
