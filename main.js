@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+let name = 'LensletLegend';
 let scene;
 let aspectRatioVideoFeedU = 4.0/3.0;
 let aspectRatioVideoFeedE = 4.0/3.0;
@@ -26,6 +27,7 @@ let renderer;
 let videoFeedU, videoFeedE;	// feeds from user/environment-facing cameras
 let camera;
 let controls;
+let raytracingSphere;
 let raytracingSphereShaderMaterial;
 	
 // Nokia HR20, according to https://www.camerafv5.com/devices/manufacturers/hmd_global/nokia_xr20_ttg_0/
@@ -38,20 +40,33 @@ let raytracingSphereRadius = 20.0;
 let offsetFromConfocal = 0.0;
 let deltaPeriod = 0.0;
 
-// the info text area
+// the status text area
 let status = document.createElement('div');
-let statusTime;	// the time the last info was posted
+let statusTime;	// the time the last status was posted
+
+// the info text area
+let info = document.createElement('div');
+let infoTime;	// the time the last info was posted
 
 let gui;
 
 // true if stored photo is showing
 let showingStoredPhoto = false;
-
 let storedPhoto;
 let storedPhotoDescription;
+let storedPhotoInfoString;
 
 // from https://github.com/4nt0nio/jpegcam
 const click = new Audio('./shutter.mp3');
+
+// uncomment the foolowing lines, and 
+// stats.begin();
+// stats.end();
+// in animate(), to show fps stats
+// import Stats from 'stats.js'
+// var stats = new Stats();
+// stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+// document.body.appendChild( stats.dom );
 
 init();
 animate();
@@ -117,10 +132,15 @@ function init() {
 
 	// the controls menu
 	createGUI();
+
+	createInfo();
+	refreshInfo();
 }
 
 function animate() {
 	requestAnimationFrame( animate );
+
+	// stats.begin();
 
 	if(!showingStoredPhoto) {
 		// update uniforms
@@ -128,6 +148,8 @@ function animate() {
 
 		renderer.render( scene,  camera );
 	}
+
+	// stats.end();
 }
 
 function updateUniforms() {
@@ -165,8 +187,8 @@ function updateUniforms() {
 		raytracingSphereShaderMaterial.uniforms.focalLength2.value +
 		offsetFromConfocal;
 	// arrange them symmetrically around z=0
-	raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z = +0.5*s;
-	raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z = -0.5*s;	// - 0.0001;
+	raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z = 0;	// +0.5*s;
+	raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z = -s;	// -0.5*s;	// - 0.0001;
 
 	// set the array periods
 	raytracingSphereShaderMaterial.uniforms.period2.value = raytracingSphereShaderMaterial.uniforms.period1.value + deltaPeriod;
@@ -196,13 +218,13 @@ function createVideoFeeds() {
 			videoFeedU.addEventListener("playing", () => {
 				aspectRatioVideoFeedU = videoFeedU.videoWidth / videoFeedU.videoHeight;
 				updateUniforms();
-				setStatus(`User-facing(?) camera resolution ${videoFeedU.videoWidth} &times; ${videoFeedU.videoHeight}`);
+				postStatus(`User-facing(?) camera resolution ${videoFeedU.videoWidth} &times; ${videoFeedU.videoHeight}`);
 			});
 		} ).catch( function ( error ) {
-			setStatus(`Unable to access user-facing camera/webcam (Error: ${error})`);
+			postStatus(`Unable to access user-facing camera/webcam (Error: ${error})`);
 		} );
 	} else {
-		setStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
+		postStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
 	}
 
 	videoFeedE = document.getElementById( 'videoFeedE' );
@@ -225,13 +247,13 @@ function createVideoFeeds() {
 			videoFeedE.addEventListener("playing", () => {
 				aspectRatioVideoFeedE = videoFeedE.videoWidth / videoFeedE.videoHeight;
 				updateUniforms();
-				setStatus(`Environment-facing(?) camera resolution ${videoFeedE.videoWidth} &times; ${videoFeedE.videoHeight}`);
+				postStatus(`Environment-facing(?) camera resolution ${videoFeedE.videoWidth} &times; ${videoFeedE.videoHeight}`);
 			});
 		} ).catch( function ( error ) {
-			setStatus(`Unable to access environment-facing camera/webcam (Error: ${error})`);
+			postStatus(`Unable to access environment-facing camera/webcam (Error: ${error})`);
 		} );
 	} else {
-		setStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
+		postStatus( 'MediaDevices interface, which is required for video streams from device cameras, not available.' );
 	}
 }
 
@@ -497,7 +519,7 @@ function addRaytracingSphere() {
 			}
 		`
 	});
-	const raytracingSphere = new THREE.Mesh( geometry, raytracingSphereShaderMaterial ); 
+	raytracingSphere = new THREE.Mesh( geometry, raytracingSphereShaderMaterial ); 
 	scene.add( raytracingSphere );
 }
 
@@ -526,20 +548,21 @@ function createGUI() {
 		'env.-facing cam. (&deg;)': fovVideoFeedE,
 		'user-facing cam. (&deg;)': fovVideoFeedU,
 		'Point (virtual) cam. forward (in -<b>z</b> direction)': pointForward,
+		'Toggle info visibility': toggleInfoVisibility,
 		'Restart video streams': function() { 
 			recreateVideoFeed(); 
-			setStatus("Restarting video stream");
+			postStatus("Restarting video stream");
 		}
 	}
 
-	const folderArray1 = gui.addFolder( 'Near lenslet array (in plane <i>z</i><sub>1</sub> = 0)' );
+	const folderArray1 = gui.addFolder( 'Lenslet array 1 (near; in plane <i>z</i><sub>1</sub> = 0)' );
 
 	folderArray1.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible1.value = v; } );
 	folderArray1.add( params1, 'Focal length, <i>f</i><sub>1</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength1.value = f; } );
 	folderArray1.add( params1, 'Period, <i>p</i><sub>1</sub>', 0.01, 1).onChange( (p) => { raytracingSphereShaderMaterial.uniforms.period1.value = p; } );
 	folderArray1.add( params1, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha1.value = alpha/180.0*Math.PI; } );
 
-	const folderArray2 = gui.addFolder( 'Far lenslet array' );
+	const folderArray2 = gui.addFolder( 'Lenslet array 2 (far)' );
 
 	folderArray2.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible2.value = v; } );
 	folderArray2.add( params2, 'Focal length, <i>f</i><sub>2</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength2.value = f; } );
@@ -555,6 +578,7 @@ function createGUI() {
 
 	const folderSettings = gui.addFolder( 'Other controls' );
 	folderSettings.add( params, 'Point (virtual) cam. forward (in -<b>z</b> direction)');
+	folderSettings.add( params, 'Toggle info visibility');
 	folderSettings.add( params, 'Restart video streams');
 	folderSettings.close();
 }
@@ -628,12 +652,12 @@ function  pointForward() {
 	camera.position.y = 0;
 	camera.position.z = r;
 	controls.update();
-	setStatus('Pointing camera forwards (in -<b>z</b> direction)');
+	postStatus('Pointing camera forwards (in -<b>z</b> direction)');
 }
 
 function onWindowResize() {
 	screenChanged();
-	setStatus(`window size ${window.innerWidth} &times; ${window.innerHeight}`);	// debug
+	postStatus(`window size ${window.innerWidth} &times; ${window.innerHeight}`);	// debug
 }
 
 // // see https://developer.mozilla.org/en-US/docs/Web/API/ScreenOrientation/change_event
@@ -654,7 +678,7 @@ function addOrbitControls() {
 	controls.listenToKeyEvents( window ); // optional
 
 	//controls.addEventListener( 'change', render ); // call this only in static scenes (i.e., if there is no animation loop)
-	controls.addEventListener( 'change', () => { setStatus(`Camera position (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`)} );
+	controls.addEventListener( 'change', cameraPositionChanged );
 
 	controls.enableDamping = false; // an animation loop is required when either damping or auto-rotation are enabled
 	controls.dampingFactor = 0.05;
@@ -662,18 +686,20 @@ function addOrbitControls() {
 	controls.enablePan = true;
 	controls.enableZoom = true;
 
-	// allowing control of the distance can result in the view being no longer 
-	// centred on the origin, so don't allow it
-	// controls.minDistance = cameraOutsideDistance;
-	// controls.maxDistance = cameraOutsideDistance;
-
 	controls.maxPolarAngle = Math.PI;
+}
+
+function cameraPositionChanged() {
+	postStatus(`Camera position (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
+	
+	// keep the raytracing sphere centred on the camera position
+	// raytracingSphere.position.copy(camera.position.clone());	// TODO this doesn't seem to work as intended!?
 }
 
 async function toggleFullscreen() {
 	if (!document.fullscreenElement) {
 		document.documentElement.requestFullscreen().catch((err) => {
-			setStatus(
+			postStatus(
 				`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`,
 			);
 		});
@@ -696,7 +722,7 @@ function showStoredPhoto() {
 	document.getElementById('storedPhoto').style.visibility = "visible";
 	showingStoredPhoto = true;
 
-	setStatus('Showing stored photo, '+storedPhotoDescription);
+	postStatus('Showing stored photo, '+storedPhotoDescription);
 }
 
 function showLivePhoto() {
@@ -711,7 +737,7 @@ function showLivePhoto() {
 	document.getElementById('storedPhoto').style.visibility = "hidden";
 	showingStoredPhoto = false;
 
-	setStatus('Showing live image');
+	postStatus('Showing live image');
 }
 
 function deleteStoredPhoto() {
@@ -719,7 +745,7 @@ function deleteStoredPhoto() {
 
 	showLivePhoto();
 
-	setStatus('Stored photo deleted; showing live image');
+	postStatus('Stored photo deleted; showing live image');
 }
 
 function takePhoto() {
@@ -727,14 +753,15 @@ function takePhoto() {
 		click.play();
 
 		storedPhoto = renderer.domElement.toDataURL('image/png');
+		storedPhotoInfoString = getInfoString();
 
-		storedPhotoDescription = `LensletLegend`;
+		storedPhotoDescription = name;
 		// 
 		document.getElementById('storedPhoto').src=storedPhoto;
 		document.getElementById('storedPhotoThumbnail').src=storedPhoto;
 		document.getElementById('storedPhotoThumbnail').style.visibility = "visible";
 	
-		setStatus('Photo taken; click thumbnail to view and share');
+		postStatus('Photo taken; click thumbnail to view and share');
 	} catch (error) {
 		console.error('Error:', error);
 	}	
@@ -745,7 +772,7 @@ async function share() {
 		fetch(storedPhoto)
 		.then(response => response.blob())
 		.then(blob => {
-			const file = new File([blob], 'LensletLegend '+storedPhotoDescription+'.png', { type: blob.type });
+			const file = new File([blob], name+storedPhotoDescription+'.png', { type: blob.type });
 
 			// Use the Web Share API to share the screenshot
 			if (navigator.share) {
@@ -754,12 +781,12 @@ async function share() {
 					files: [file],
 				});
 			} else {
-				setStatus('Sharing is not supported by this browser.');
+				postStatus('Sharing is not supported by this browser.');
 			}	
 		})
 		.catch(error => {
 			console.error('Error:', error);
-			setStatus(`Error: ${error}`);
+			postStatus(`Error: ${error}`);
 		});
 	} catch (error) {
 		console.error('Error:', error);
@@ -776,24 +803,48 @@ function createStatus() {
 	status.style.color = "White";
 	status.style.fontFamily = "Arial";
 	status.style.fontSize = "9pt";
-	setStatus("Welcome!");
+	postStatus("Welcome!");
 	status.style.bottom = 0 + 'px';
 	status.style.left = 0 + 'px';
 	status.style.zIndex = 1;
 	document.body.appendChild(status);	
 }
 
-function setStatus(text) {
+function postStatus(text) {
 	status.innerHTML = '&nbsp;'+text;
-	console.log(text);
+	console.log('status: '+text);
 
 	// show the text only for 3 seconds
 	statusTime = new Date().getTime();
-	setTimeout( () => { if(new Date().getTime() - statusTime > 2999) status.innerHTML = `&nbsp;LensletLegend, University of Glasgow, <a href="https://github.com/jkcuk/LensletLegend">https://github.com/jkcuk/LensletLegend</a>` }, 3000);
+	setTimeout( () => { if(new Date().getTime() - statusTime > 2999) status.innerHTML = '&nbsp;'+name+', University of Glasgow, <a href="https://github.com/jkcuk/'+name+'">https://github.com/jkcuk/'+name+'</a>' }, 3000);
 }
 
-function showInfo() {
-	setInfo(`camera position = ${camera.position}`);
+function getInfoString() {
+	return `Lenslet array 1 (the closer array, when seen in "forward" direction)<br>` +
+		`&nbsp;&nbsp;visible = ${raytracingSphereShaderMaterial.uniforms.visible1.value}<br>` +
+		`&nbsp;&nbsp;period = ${raytracingSphereShaderMaterial.uniforms.period1.value.toFixed(4)}<br>` +
+		`&nbsp;&nbsp;rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha1.value.toFixed(4)}&deg;<br>` +
+		`&nbsp;&nbsp;focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength1.value.toFixed(4)}<br>` +
+		`&nbsp;&nbsp;radius = ${raytracingSphereShaderMaterial.uniforms.radius1.value.toFixed(4)}<br>` +
+		`&nbsp;&nbsp;centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.x.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.y.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z.toFixed(4)})<br>` +
+		`Lenslet array 2 (the farther array, when seen in "forward" direction)<br>` +
+		`&nbsp;&nbsp;visible = ${raytracingSphereShaderMaterial.uniforms.visible2.value}<br>` +
+		`&nbsp;&nbsp;period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toFixed(4)} (&Delta;period = ${deltaPeriod.toFixed(4)})<br>` +
+		`&nbsp;&nbsp;rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha2.value.toFixed(4)}&deg;<br>` +
+		`&nbsp;&nbsp;focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength2.value.toFixed(4)}<br>` +
+		`&nbsp;&nbsp;radius = ${raytracingSphereShaderMaterial.uniforms.radius2.value.toFixed(4)}<br>` +
+		`&nbsp;&nbsp;centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z.toFixed(4)}) (offset from confocal = ${offsetFromConfocal})<br>` +
+		`camera position = (${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)})<br>` +
+		`Horiz. FOV of user-facing(?) camera = ${fovVideoFeedU.toFixed(4)}&deg;<br>` +	// (user-facing) camera
+		`Horiz. FOV of environment-facing(?) camera = ${fovVideoFeedE.toFixed(4)}&deg;<br>` +	// (environment-facing) camera
+		`Horiz. FOV of screen = ${fovScreen.toFixed(4)}`;
+}
+
+function refreshInfo() {
+	if(showingStoredPhoto) setInfo( storedPhotoInfoString );
+	else setInfo( getInfoString() );
+
+	if(info.style.visibility == "visible") setTimeout( refreshInfo , 100);	// refresh again a while
 }
 
 /** 
@@ -807,17 +858,30 @@ function createInfo() {
 	info.style.fontFamily = "Arial";
 	info.style.fontSize = "9pt";
 	setInfo("");
-	info.style.bottom = 0 + 'px';
+	info.style.top = 70 + 'px';
 	info.style.left = 0 + 'px';
 	info.style.zIndex = 1;
-	document.body.appendChild(info);	
+	document.body.appendChild(info);
+	info.style.visibility = "hidden";
 }
 
 function setInfo(text) {
-	info.innerHTML = '&nbsp;'+text;
-	console.log(text);
+	info.innerHTML = text;
+	console.log('info: '+text);
+	// // show the text only for 3 seconds
+	// infoTime = new Date().getTime();
+	// setTimeout( () => { if(new Date().getTime() - infoTime > 2999) info.innerHTML = `` }, 3000);
+	// info.style.visibility = "visible";
+}
 
-	// show the text only for 3 seconds
-	infoTime = new Date().getTime();
-	setTimeout( () => { if(new Date().getTime() - infoTime > 2999) info.innerHTML = `` }, 3000);
+function toggleInfoVisibility() {
+	switch(info.style.visibility) {
+		case "visible":
+			info.style.visibility = "hidden";
+			break;
+		case "hidden":
+		default:
+			info.style.visibility = "visible";
+			refreshInfo();
+	}
 }
