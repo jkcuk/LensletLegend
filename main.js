@@ -821,14 +821,14 @@ function postStatus(text) {
 
 function getInfoString() {
 	return `Lenslet array 1 (the closer array, when seen in "forward" direction)<br>` +
-		`&nbsp;&nbsp;Visible = ${raytracingSphereShaderMaterial.uniforms.visible1.value}<br>` +
+		`&nbsp;&nbsp;Visible `+ (raytracingSphereShaderMaterial.uniforms.visible1.value?'&check;':'&cross;')+`<br>` +
 		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period1.value.toFixed(4)}<br>` +
 		`&nbsp;&nbsp;Rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha1.value.toFixed(4)}&deg;<br>` +
 		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength1.value.toFixed(4)}<br>` +
 		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius1.value.toFixed(4)}<br>` +
 		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.x.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.y.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z.toFixed(4)})<br>` +
 		`Lenslet array 2 (the farther array, when seen in "forward" direction)<br>` +
-		`&nbsp;&nbsp;Visible = ${raytracingSphereShaderMaterial.uniforms.visible2.value}<br>` +
+		`&nbsp;&nbsp;Visible `+ (raytracingSphereShaderMaterial.uniforms.visible2.value?'&check;':'&cross;')+`<br>` +
 		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toFixed(4)} (&Delta;<sub>period</sub> = ${deltaPeriod.toFixed(4)})<br>` +
 		`&nbsp;&nbsp;Rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha2.value.toFixed(4)}&deg;<br>` +
 		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength2.value.toFixed(4)}<br>` +
