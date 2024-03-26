@@ -40,6 +40,13 @@ let raytracingSphereRadius = 20.0;
 let offsetFromConfocal = 0.0;
 let deltaPeriod = 0.0;
 
+// camera with wide aperture
+let apertureRadius = 0.1;
+let focusDistance = 10.0;
+let noOfRays = 5;
+// let pointsOnAperture = [];
+
+
 // the status text area
 let status = document.createElement('div');
 let statusTime;	// the time the last status was posted
@@ -49,6 +56,8 @@ let info = document.createElement('div');
 let infoTime;	// the time the last info was posted
 
 let gui;
+
+// let counter = 0;
 
 // true if stored photo is showing
 let showingStoredPhoto = false;
@@ -192,6 +201,58 @@ function updateUniforms() {
 
 	// set the array periods
 	raytracingSphereShaderMaterial.uniforms.period2.value = raytracingSphereShaderMaterial.uniforms.period1.value + deltaPeriod;
+
+	// create the points on the aperture
+
+	// create basis vectors for the camera's clear aperture
+	let viewDirection = new THREE.Vector3();
+	let apertureBasisVector1 = new THREE.Vector3();
+	let apertureBasisVector2 = new THREE.Vector3();
+	camera.getWorldDirection(viewDirection);
+	// if(counter < 10) console.log(`viewDirection = (${viewDirection.x.toFixed(2)}, ${viewDirection.y.toFixed(2)}, ${viewDirection.z.toFixed(2)})`);
+
+	if((viewDirection.x == 0.0) && (viewDirection.y == 0.0)) {
+		// viewDirection is along z direction
+		apertureBasisVector1.crossVectors(viewDirection, new THREE.Vector3(1, 0, 0)).normalize();
+	} else {
+		// viewDirection is not along z direction
+		apertureBasisVector1.crossVectors(viewDirection, new THREE.Vector3(0, 0, 1)).normalize();
+	}
+	// viewDirection = new THREE.Vector3(0, 0, -1);
+	// apertureBasisVector1 = new THREE.Vector3(1, 0, 0);
+	apertureBasisVector2.crossVectors(viewDirection, apertureBasisVector1).normalize();
+
+	// apertureBasis1 *= apertureRadius;
+	// apertureBasis2 *= apertureRadius;
+
+	// if(counter < 10) console.log(`apertureBasisVector1 = (${apertureBasisVector1.x.toFixed(2)}, ${apertureBasisVector1.y.toFixed(2)}, ${apertureBasisVector1.z.toFixed(2)})`);
+	// if(counter < 10) console.log(`apertureBasisVector2 = (${apertureBasisVector2.x.toFixed(2)}, ${apertureBasisVector2.y.toFixed(2)}, ${apertureBasisVector2.z.toFixed(2)})`);
+	// counter++;
+
+	// create random points on the (circular) aperture
+	// let i=0;
+	// pointsOnAperture = [];	// clear the array containing points on the aperture
+	// do {
+	// 	// create a new random point on the camera's clear aperture
+	// 	let x = 2*Math.random()-1;	// random number between -1 and 1
+	// 	let y = 2*Math.random()-1;	// random number between -1 and 1
+	// 	if(x*x + y*y <= 1) {
+	// 		// (x,y) lies within a circle of radius 1
+	// 		//  add a new point to the array of points on the aperture
+	// 		pointsOnAperture.push(apertureRadius*x*apertureBasis1 + apertureRadius*y*apertureBasis2);
+	// 		i++;
+	// 	}
+	// } while (i < noOfRays);
+	raytracingSphereShaderMaterial.uniforms.noOfRays.value = noOfRays;
+	raytracingSphereShaderMaterial.uniforms.apertureXHat.value.x = apertureRadius*apertureBasisVector1.x;
+	raytracingSphereShaderMaterial.uniforms.apertureXHat.value.y = apertureRadius*apertureBasisVector1.y;
+	raytracingSphereShaderMaterial.uniforms.apertureXHat.value.z = apertureRadius*apertureBasisVector1.z;
+	raytracingSphereShaderMaterial.uniforms.apertureYHat.value.x = apertureRadius*apertureBasisVector2.x;
+	raytracingSphereShaderMaterial.uniforms.apertureYHat.value.y = apertureRadius*apertureBasisVector2.y;
+	raytracingSphereShaderMaterial.uniforms.apertureYHat.value.z = apertureRadius*apertureBasisVector2.z;
+	// raytracingSphereShaderMaterial.uniforms.pointsOnAperture.value = pointsOnAperture;
+	// raytracingSphereShaderMaterial.uniforms.apertureRadius.value = apertureRadius;
+	raytracingSphereShaderMaterial.uniforms.focusDistance.value = focusDistance;
 }
 
 function createVideoFeeds() {
@@ -264,6 +325,23 @@ function addRaytracingSphere() {
 	videoFeedUTexture.colorSpace = THREE.SRGBColorSpace;
 	videoFeedETexture.colorSpace = THREE.SRGBColorSpace;
 
+	// create random numbers
+	let i=0;
+	let randomNumbersX = [];
+	let randomNumbersY = [];
+	do {
+		// create a new pairs or random numbers (x, y) such that x^2 + y^2 <= 1
+		let x = 2*Math.random()-1;	// random number between -1 and 1
+		let y = 2*Math.random()-1;	// random number between -1 and 1
+		if(x*x + y*y <= 1) {
+			// (x,y) lies within a circle of radius 1
+			//  add a new point to the array of points on the aperture
+			randomNumbersX.push(apertureRadius*x);
+			randomNumbersY.push(apertureRadius*y);
+			i++;
+		}
+	} while (i < 100);
+
 	// the sphere surrouning the camera in all directions
 	const geometry = 
 		new THREE.SphereGeometry( raytracingSphereRadius );
@@ -289,7 +367,13 @@ function addRaytracingSphere() {
 			tanHalfFovHU: { value: 1.0 },
 			tanHalfFovVU: { value: 1.0 },
 			tanHalfFovHE: { value: 1.0 },
-			tanHalfFovVE: { value: 1.0 }
+			tanHalfFovVE: { value: 1.0 },
+			focusDistance: { value: 10.0 },
+			apertureXHat: { value: new THREE.Vector3(1, 0, 0) },
+			apertureYHat: { value: new THREE.Vector3(0, 1, 0) },
+			randomNumbersX: { value: randomNumbersX },
+			randomNumbersY: { value: randomNumbersY },
+			noOfRays: { value: 1 }
 		},
 		vertexShader: `
 			varying vec3 intersectionPoint;
@@ -332,6 +416,15 @@ function addRaytracingSphere() {
 			uniform sampler2D videoFeedETexture;
 			uniform float tanHalfFovHE;
 			uniform float tanHalfFovVE;
+
+			// the camera's wide aperture
+			uniform float focusDistance;
+			uniform int noOfRays;
+			uniform vec3 apertureXHat;
+			uniform vec3 apertureYHat;
+			uniform float randomNumbersX[100];
+			uniform float randomNumbersY[100];
+			// uniform float apertureRadius;
 
 			// rotate the 2D vector v by the angle alpha (in radians)
 			// from https://gist.github.com/yiwenl/3f804e80d0930e34a0b33359259b556c
@@ -472,50 +565,61 @@ function addRaytracingSphere() {
 			}
 
 			void main() {
-				// first calculate the current light-ray direction:
-				// the camera pinhole is positioned at cameraPosition,
-				// the intersection point with the sphere is intersectionPoint,
-				// so the "backwards" ray direction from the camera to the intersection point is
-				//   d = intersectionPoint - cameraPosition
-				vec3 d = intersectionPoint - cameraPosition;
+				// first calculate the point this pixel is focussed on
+				vec3 dF = intersectionPoint - cameraPosition;
+				vec3 focusPosition = cameraPosition + focusDistance/dF.z*dF;
 
-				// the current ray start position; start at the camera
-				vec3 p = cameraPosition;
-
-				// current brightness factor; this will multiply the colour at the end
-				vec4 b = vec4(1.0, 1.0, 1.0, 1.0);
-
-				if(d.z < 0.0) {
-					// the ray is travelling "forwards", in the (-z) direction
-					if(visible1) passThroughLensletArray(p, d, b, centreOfArray1,  radius1, alpha1, period1, focalLength1);
-					if(visible2) passThroughLensletArray(p, d, b, centreOfArray2,  radius2, alpha2, period2, focalLength2);
-					// if(visible1) passThroughLens(p, d, b, centreOfArray1,  radius1, focalLength1);
-					// if(visible2) passThroughLens(p, d, b, centreOfArray2,  radius2, focalLength2);
-				} else {
-					// the ray is travelling "backwards", in the (+z) direction
-					if(visible2) passThroughLensletArray(p, d, b, centreOfArray2,  radius2, alpha2, period2, focalLength2);
-					if(visible1) passThroughLensletArray(p, d, b, centreOfArray1,  radius1, alpha1, period1, focalLength1);
+				// trace <noOfRays> rays
+				gl_FragColor = vec4(0, 0, 0, 0);
+				vec4 color;
+				for(int i=0; i<noOfRays; i++) {
+					// the current ray start position, a random point on the camera's circular aperture
+					vec3 p = cameraPosition + randomNumbersX[i]*apertureXHat + randomNumbersY[i]*apertureYHat;
+	
+					// first calculate the current light-ray direction:
+					// the ray first passes through focusPosition and then p,
+					// so the "backwards" ray direction from the camera to the intersection point is
+					//   d = focusPosition - p
+					vec3 d = focusPosition - p;
+					d = dF.z/d.z*d;
+	
+					// current brightness factor; this will multiply the colour at the end
+					vec4 b = vec4(1.0, 1.0, 1.0, 1.0);
+	
+					if(d.z < 0.0) {
+						// the ray is travelling "forwards", in the (-z) direction
+						if(visible1) passThroughLensletArray(p, d, b, centreOfArray1,  radius1, alpha1, period1, focalLength1);
+						if(visible2) passThroughLensletArray(p, d, b, centreOfArray2,  radius2, alpha2, period2, focalLength2);
+						// if(visible1) passThroughLens(p, d, b, centreOfArray1,  radius1, focalLength1);
+						// if(visible2) passThroughLens(p, d, b, centreOfArray2,  radius2, focalLength2);
+					} else {
+						// the ray is travelling "backwards", in the (+z) direction
+						if(visible2) passThroughLensletArray(p, d, b, centreOfArray2,  radius2, alpha2, period2, focalLength2);
+						if(visible1) passThroughLensletArray(p, d, b, centreOfArray1,  radius1, alpha1, period1, focalLength1);
+					}
+	
+					// does the ray intersect the (infinitely distant) camera image whose angular width and height is
+					// given by arctan(2*tanHalfFovH) and arctan(2*tanHalfFovV?
+					vec3 d1 = d/abs(d.z);
+					if(d.z < 0.0) {
+						// forwards-facing ray
+						if((abs(d1.x) < tanHalfFovHE) && (abs(d1.y) < tanHalfFovVE))
+							// yes, the ray intersects the image; take the pixel colour from the camera's video feed
+							color = texture2D(videoFeedETexture, vec2(0.5+0.5*d1.x/tanHalfFovHE, 0.5+0.5*d1.y/tanHalfFovVE));
+						else color = vec4(1, 1, 1, 1.0);	// white
+					} else {
+						// backwards-facing ray
+						if((abs(d1.x) < tanHalfFovHU) && (abs(d1.y) < tanHalfFovVU))
+							// yes, the ray intersects the image; take the pixel colour from the camera's video feed
+							color = texture2D(videoFeedUTexture, vec2(0.5-0.5*d1.x/tanHalfFovHU, 0.5+0.5*d1.y/tanHalfFovVU));
+						else color = vec4(1, 0, 0, 1.0);	// red
+					}
+	
+					// finally, multiply by the brightness factor and add to gl_FragColor
+					gl_FragColor += b*color;
 				}
-
-				// does the ray intersect the (infinitely distant) camera image whose angular width and height is
-				// given by arctan(2*tanHalfFovH) and arctan(2*tanHalfFovV?
-				vec3 d1 = d/abs(d.z);
-				if(d.z < 0.0) {
-					// forwards-facing ray
-					if((abs(d1.x) < tanHalfFovHE) && (abs(d1.y) < tanHalfFovVE))
-						// yes, the ray intersects the image; take the pixel colour from the camera's video feed
-						gl_FragColor = texture2D(videoFeedETexture, vec2(0.5+0.5*d1.x/tanHalfFovHE, 0.5+0.5*d1.y/tanHalfFovVE));
-					else gl_FragColor = vec4(1, 1, 1, 1.0);	// white
-				} else {
-					// backwards-facing ray
-					if((abs(d1.x) < tanHalfFovHU) && (abs(d1.y) < tanHalfFovVU))
-						// yes, the ray intersects the image; take the pixel colour from the camera's video feed
-						gl_FragColor = texture2D(videoFeedUTexture, vec2(0.5-0.5*d1.x/tanHalfFovHU, 0.5+0.5*d1.y/tanHalfFovVU));
-					else gl_FragColor = vec4(1, 0, 0, 1.0);	// red
-				}
-
-				// finally, multiply by the brightness factor
-				gl_FragColor *= b;
+					
+				gl_FragColor /= float(noOfRays);
 			}
 		`
 	});
@@ -544,13 +648,16 @@ function createGUI() {
 	};
 	const params = {
 		// 'Swap arrays': swapArrays,
-		'screen (&deg;)': fovScreen,
-		'env.-facing cam. (&deg;)': fovVideoFeedE,
-		'user-facing cam. (&deg;)': fovVideoFeedU,
+		'Horiz. FOV (&deg;)': fovScreen,
+		'Aperture radius': apertureRadius,
+		'tan<sup>-1</sup>(focus. dist.)': Math.atan(focusDistance),
+		'No of rays': noOfRays,
+		'Env.-facing cam. (&deg;)': fovVideoFeedE,
+		'User-facing cam. (&deg;)': fovVideoFeedU,
 		'Point (virtual) cam. forward (in -<b>z</b> direction)': pointForward,
 		'Show/hide info': toggleInfoVisibility,
 		'Restart video streams': function() { 
-			recreateVideoFeed(); 
+			recreateVideoFeeds(); 
 			postStatus("Restarting video stream");
 		}
 	}
@@ -570,11 +677,16 @@ function createGUI() {
 	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
 	folderArray2.add( params2, 'Offset from confocal', -0.25, 0.25).onChange( (o) => { offsetFromConfocal = o; } );
 
-	const folderFOV = gui.addFolder( 'Fields of view' );
-	folderFOV.add( params, 'screen (&deg;)', 10, 170, 1).onChange( setScreenFOV );
-	folderFOV.add( params, 'env.-facing cam. (&deg;)', 10, 170, 1).onChange( (fov) => { fovVideoFeedE = fov; updateUniforms(); });   
-	folderFOV.add( params, 'user-facing cam. (&deg;)', 10, 170, 1).onChange( (fov) => { fovVideoFeedU = fov; updateUniforms(); });   
-	folderFOV.close();
+	const folderDevice = gui.addFolder( 'Device cameras horiz. FOV' );
+	folderDevice.add( params, 'Env.-facing cam. (&deg;)', 10, 170, 1).onChange( (fov) => { fovVideoFeedE = fov; updateUniforms(); });   
+	folderDevice.add( params, 'User-facing cam. (&deg;)', 10, 170, 1).onChange( (fov) => { fovVideoFeedU = fov; updateUniforms(); });   
+	folderDevice.close();
+
+	const folderVirtualCamera = gui.addFolder( 'Virtual camera' );
+	folderVirtualCamera.add( params, 'Horiz. FOV (&deg;)', 10, 170, 1).onChange( setScreenFOV );
+	folderVirtualCamera.add( params, 'Aperture radius', 0.0, 1.0).onChange( (r) => { apertureRadius = r; } );
+	folderVirtualCamera.add( params, 'tan<sup>-1</sup>(focus. dist.)', -0.5*Math.PI, 0.5*Math.PI).onChange( (a) => { focusDistance = Math.tan(a); } );
+	folderVirtualCamera.add( params, 'No of rays', 1, 100, 1).onChange( (n) => { noOfRays = n; } );
 
 	const folderSettings = gui.addFolder( 'Other controls' );
 	folderSettings.add( params, 'Point (virtual) cam. forward (in -<b>z</b> direction)');
@@ -691,7 +803,7 @@ function addOrbitControls() {
 
 function cameraPositionChanged() {
 	postStatus(`Camera position (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
-	
+	// counter = 0;
 	// keep the raytracing sphere centred on the camera position
 	// raytracingSphere.position.copy(camera.position.clone());	// TODO this doesn't seem to work as intended!?
 }
@@ -837,7 +949,11 @@ function getInfoString() {
 		`Camera position = (${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)})<br>` +
 		`Horiz. FOV of user-facing(?) camera = ${fovVideoFeedU.toFixed(4)}&deg;<br>` +	// (user-facing) camera
 		`Horiz. FOV of environment-facing(?) camera = ${fovVideoFeedE.toFixed(4)}&deg;<br>` +	// (environment-facing) camera
-		`Horiz. FOV of screen = ${fovScreen.toFixed(4)}`;
+		`Horiz. FOV of screen = ${fovScreen.toFixed(4)}<br>` +
+		`apertureXHat = (${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.x.toFixed(2)}, ${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.y.toFixed(2)}, ${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.z.toFixed(2)})<br>` +
+		`apertureYHat = (${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.x.toFixed(2)}, ${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.y.toFixed(2)}, ${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.z.toFixed(2)})`
+		;
+		console.log("*");
 }
 
 function refreshInfo() {
@@ -857,7 +973,7 @@ function createInfo() {
 	info.style.color = "White";
 	info.style.fontFamily = "Arial";
 	info.style.fontSize = "9pt";
-	setInfo("");
+	info.innerHTML = "-- nothing to show (yet) --";
 	info.style.top = 70 + 'px';
 	info.style.left = 0 + 'px';
 	info.style.zIndex = 1;
