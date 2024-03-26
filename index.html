@@ -26,16 +26,15 @@
     	        cursor: pointer;
 	            z-index: 2; /* Ensure image is above the canvas */
   	      	}
-			#backButton {
+			#infoButton {
     	        position: absolute; /* Position the image absolutely */
         	    left: 20px;
           	  	top: 20px;
             	width: 20px; /* Set the width of the image */
     	        cursor: pointer;
-				visibility: hidden;	/* hide this button for the moment */
-	            z-index: 2; /* Ensure image is above the canvas */
+				z-index: 2; /* Ensure image is above the canvas */
   	      	}
-			#shareButton {
+			#backButton {
     	        position: absolute; /* Position the image absolutely */
         	    left: 80px;
           	  	top: 20px;
@@ -44,9 +43,18 @@
 				visibility: hidden;	/* hide this button for the moment */
 	            z-index: 2; /* Ensure image is above the canvas */
   	      	}
-			#deleteButton {
+			#shareButton {
     	        position: absolute; /* Position the image absolutely */
         	    left: 140px;
+          	  	top: 20px;
+            	width: 20px; /* Set the width of the image */
+    	        cursor: pointer;
+				visibility: hidden;	/* hide this button for the moment */
+	            z-index: 2; /* Ensure image is above the canvas */
+  	      	}
+			#deleteButton {
+    	        position: absolute; /* Position the image absolutely */
+        	    left: 200px;
           	  	top: 20px;
             	width: 20px; /* Set the width of the image */
     	        cursor: pointer;
@@ -103,6 +111,7 @@
 	<body>
 		<video id="videoFeedU" style="display:none" autoplay playsinline></video>
 		<video id="videoFeedE" style="display:none" autoplay playsinline></video>
+		<img id="infoButton" src="./infoButton.png" alt="Show/hide info">
 		<img id="backButton" src="./backButton.png" alt="Back to live view">
 		<img id="shareButton" src="./shareButton.png" alt="Share photo...">
 		<img id="deleteButton" src="./deleteButton.png" alt="Delete stored photo">
