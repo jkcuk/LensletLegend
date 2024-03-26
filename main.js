@@ -41,9 +41,9 @@ let offsetFromConfocal = 0.0;
 let deltaPeriod = 0.0;
 
 // camera with wide aperture
-let apertureRadius = 0.1;
-let focusDistance = 10.0;
-let noOfRays = 5;
+let apertureRadius = 0.0;
+let focusDistance = 1e8;
+let noOfRays = 1;
 // let pointsOnAperture = [];
 
 
@@ -115,6 +115,9 @@ function init() {
 	// toggle fullscreen button functionality
 	document.getElementById('fullscreenButton').addEventListener('click', toggleFullscreen);
 
+	// info button functionality
+	document.getElementById('infoButton').addEventListener('click', toggleInfoVisibility);
+
 	// back button functionality
 	document.getElementById('backButton').addEventListener('click', showLivePhoto);
 	document.getElementById('backButton').style.visibility = "hidden";
@@ -122,6 +125,7 @@ function init() {
 	// share button
 	document.getElementById('shareButton').addEventListener('click', share);
 	document.getElementById('shareButton').style.visibility = "hidden";
+	if(!(navigator.share)) document.getElementById('shareButton').style.opacity = 0.3;
 
 	// delete button
 	document.getElementById('deleteButton').addEventListener('click', deleteStoredPhoto);
@@ -209,7 +213,7 @@ function updateUniforms() {
 	let apertureBasisVector1 = new THREE.Vector3();
 	let apertureBasisVector2 = new THREE.Vector3();
 	camera.getWorldDirection(viewDirection);
-	// if(counter < 10) console.log(`viewDirection = (${viewDirection.x.toFixed(2)}, ${viewDirection.y.toFixed(2)}, ${viewDirection.z.toFixed(2)})`);
+	// if(counter < 10) console.log(`viewDirection = (${viewDirection.x.toPrecision(2)}, ${viewDirection.y.toPrecision(2)}, ${viewDirection.z.toPrecision(2)})`);
 
 	if((viewDirection.x == 0.0) && (viewDirection.y == 0.0)) {
 		// viewDirection is along z direction
@@ -225,8 +229,8 @@ function updateUniforms() {
 	// apertureBasis1 *= apertureRadius;
 	// apertureBasis2 *= apertureRadius;
 
-	// if(counter < 10) console.log(`apertureBasisVector1 = (${apertureBasisVector1.x.toFixed(2)}, ${apertureBasisVector1.y.toFixed(2)}, ${apertureBasisVector1.z.toFixed(2)})`);
-	// if(counter < 10) console.log(`apertureBasisVector2 = (${apertureBasisVector2.x.toFixed(2)}, ${apertureBasisVector2.y.toFixed(2)}, ${apertureBasisVector2.z.toFixed(2)})`);
+	// if(counter < 10) console.log(`apertureBasisVector1 = (${apertureBasisVector1.x.toPrecision(2)}, ${apertureBasisVector1.y.toPrecision(2)}, ${apertureBasisVector1.z.toPrecision(2)})`);
+	// if(counter < 10) console.log(`apertureBasisVector2 = (${apertureBasisVector2.x.toPrecision(2)}, ${apertureBasisVector2.y.toPrecision(2)}, ${apertureBasisVector2.z.toPrecision(2)})`);
 	// counter++;
 
 	// create random points on the (circular) aperture
@@ -251,8 +255,27 @@ function updateUniforms() {
 	raytracingSphereShaderMaterial.uniforms.apertureYHat.value.y = apertureRadius*apertureBasisVector2.y;
 	raytracingSphereShaderMaterial.uniforms.apertureYHat.value.z = apertureRadius*apertureBasisVector2.z;
 	// raytracingSphereShaderMaterial.uniforms.pointsOnAperture.value = pointsOnAperture;
-	// raytracingSphereShaderMaterial.uniforms.apertureRadius.value = apertureRadius;
+	raytracingSphereShaderMaterial.uniforms.apertureRadius.value = apertureRadius;
 	raytracingSphereShaderMaterial.uniforms.focusDistance.value = focusDistance;
+
+	// (re)create random numbers
+	// let i=0;
+	// let randomNumbersX = [];
+	// let randomNumbersY = [];
+	// do {
+	// 	// create a new pairs or random numbers (x, y) such that x^2 + y^2 <= 1
+	// 	let x = 2*Math.random()-1;	// random number between -1 and 1
+	// 	let y = 2*Math.random()-1;	// random number between -1 and 1
+	// 	if(x*x + y*y <= 1) {
+	// 		// (x,y) lies within a circle of radius 1
+	// 		//  add a new point to the array of points on the aperture
+	// 		randomNumbersX.push(apertureRadius*x);
+	// 		randomNumbersY.push(apertureRadius*y);
+	// 		i++;
+	// 	}
+	// } while (i < 100);
+	// raytracingSphereShaderMaterial.uniforms.randomNumbersX.value = randomNumbersX;
+	// raytracingSphereShaderMaterial.uniforms.randomNumbersY.value = randomNumbersY;
 }
 
 function createVideoFeeds() {
@@ -336,8 +359,8 @@ function addRaytracingSphere() {
 		if(x*x + y*y <= 1) {
 			// (x,y) lies within a circle of radius 1
 			//  add a new point to the array of points on the aperture
-			randomNumbersX.push(apertureRadius*x);
-			randomNumbersY.push(apertureRadius*y);
+			randomNumbersX.push(x);
+			randomNumbersY.push(y);
 			i++;
 		}
 	} while (i < 100);
@@ -371,6 +394,7 @@ function addRaytracingSphere() {
 			focusDistance: { value: 10.0 },
 			apertureXHat: { value: new THREE.Vector3(1, 0, 0) },
 			apertureYHat: { value: new THREE.Vector3(0, 1, 0) },
+			apertureRadius: { value: apertureRadius },
 			randomNumbersX: { value: randomNumbersX },
 			randomNumbersY: { value: randomNumbersY },
 			noOfRays: { value: 1 }
@@ -422,6 +446,7 @@ function addRaytracingSphere() {
 			uniform int noOfRays;
 			uniform vec3 apertureXHat;
 			uniform vec3 apertureYHat;
+			uniform float apertureRadius;
 			uniform float randomNumbersX[100];
 			uniform float randomNumbersY[100];
 			// uniform float apertureRadius;
@@ -574,7 +599,7 @@ function addRaytracingSphere() {
 				vec4 color;
 				for(int i=0; i<noOfRays; i++) {
 					// the current ray start position, a random point on the camera's circular aperture
-					vec3 p = cameraPosition + randomNumbersX[i]*apertureXHat + randomNumbersY[i]*apertureYHat;
+					vec3 p = cameraPosition + apertureRadius*randomNumbersX[i]*apertureXHat + apertureRadius*randomNumbersY[i]*apertureYHat;
 	
 					// first calculate the current light-ray direction:
 					// the ray first passes through focusPosition and then p,
@@ -685,7 +710,7 @@ function createGUI() {
 	const folderVirtualCamera = gui.addFolder( 'Virtual camera' );
 	folderVirtualCamera.add( params, 'Horiz. FOV (&deg;)', 10, 170, 1).onChange( setScreenFOV );
 	folderVirtualCamera.add( params, 'Aperture radius', 0.0, 1.0).onChange( (r) => { apertureRadius = r; } );
-	folderVirtualCamera.add( params, 'tan<sup>-1</sup>(focus. dist.)', -0.5*Math.PI, 0.5*Math.PI).onChange( (a) => { focusDistance = Math.tan(a); } );
+	folderVirtualCamera.add( params, 'tan<sup>-1</sup>(focus. dist.)', Math.atan(1), 0.5*Math.PI).onChange( (a) => { focusDistance = Math.tan(a); } );
 	folderVirtualCamera.add( params, 'No of rays', 1, 100, 1).onChange( (n) => { noOfRays = n; } );
 
 	const folderSettings = gui.addFolder( 'Other controls' );
@@ -802,7 +827,7 @@ function addOrbitControls() {
 }
 
 function cameraPositionChanged() {
-	postStatus(`Camera position (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
+	postStatus(`Camera position (${camera.position.x.toPrecision(2)}, ${camera.position.y.toPrecision(2)}, ${camera.position.z.toPrecision(2)})`);
 	// counter = 0;
 	// keep the raytracing sphere centred on the camera position
 	// raytracingSphere.position.copy(camera.position.clone());	// TODO this doesn't seem to work as intended!?
@@ -934,24 +959,28 @@ function postStatus(text) {
 function getInfoString() {
 	return `Lenslet array 1 (the closer array, when seen in "forward" direction)<br>` +
 		`&nbsp;&nbsp;Visible `+ (raytracingSphereShaderMaterial.uniforms.visible1.value?'&check;':'&cross;')+`<br>` +
-		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period1.value.toFixed(4)}<br>` +
-		`&nbsp;&nbsp;Rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha1.value.toFixed(4)}&deg;<br>` +
-		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength1.value.toFixed(4)}<br>` +
-		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius1.value.toFixed(4)}<br>` +
-		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.x.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.y.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z.toFixed(4)})<br>` +
+		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period1.value.toPrecision(4)}<br>` +
+		`&nbsp;&nbsp;Rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha1.value.toPrecision(4)}&deg;<br>` +
+		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength1.value.toPrecision(4)}<br>` +
+		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius1.value.toPrecision(4)}<br>` +
+		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z.toPrecision(4)})<br>` +
 		`Lenslet array 2 (the farther array, when seen in "forward" direction)<br>` +
 		`&nbsp;&nbsp;Visible `+ (raytracingSphereShaderMaterial.uniforms.visible2.value?'&check;':'&cross;')+`<br>` +
-		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toFixed(4)} (&Delta;<sub>period</sub> = ${deltaPeriod.toFixed(4)})<br>` +
-		`&nbsp;&nbsp;Rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha2.value.toFixed(4)}&deg;<br>` +
-		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength2.value.toFixed(4)}<br>` +
-		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius2.value.toFixed(4)}<br>` +
-		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y.toFixed(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z.toFixed(4)}) (offset from confocal = ${offsetFromConfocal.toFixed(4)})<br>` +
-		`Camera position = (${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)})<br>` +
-		`Horiz. FOV of user-facing(?) camera = ${fovVideoFeedU.toFixed(4)}&deg;<br>` +	// (user-facing) camera
-		`Horiz. FOV of environment-facing(?) camera = ${fovVideoFeedE.toFixed(4)}&deg;<br>` +	// (environment-facing) camera
-		`Horiz. FOV of screen = ${fovScreen.toFixed(4)}<br>` +
-		`apertureXHat = (${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.x.toFixed(2)}, ${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.y.toFixed(2)}, ${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.z.toFixed(2)})<br>` +
-		`apertureYHat = (${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.x.toFixed(2)}, ${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.y.toFixed(2)}, ${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.z.toFixed(2)})`
+		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toPrecision(4)} (&Delta;<sub>period</sub> = ${deltaPeriod.toPrecision(4)})<br>` +
+		`&nbsp;&nbsp;Rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha2.value.toPrecision(4)}&deg;<br>` +
+		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength2.value.toPrecision(4)}<br>` +
+		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius2.value.toPrecision(4)}<br>` +
+		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z.toPrecision(4)}) (offset from confocal = ${offsetFromConfocal.toPrecision(4)})<br>` +
+		`Camera position = (${camera.position.x.toPrecision(4)}, ${camera.position.y.toPrecision(4)}, ${camera.position.z.toPrecision(4)})<br>` +
+		`Horiz. FOV of user-facing(?) camera = ${fovVideoFeedU.toPrecision(4)}&deg;<br>` +	// (user-facing) camera
+		`Horiz. FOV of environment-facing(?) camera = ${fovVideoFeedE.toPrecision(4)}&deg;<br>` +	// (environment-facing) camera
+		`Virtual camera<br>` +
+		`&nbsp;&nbsp;Horiz. FOV = ${fovScreen.toPrecision(4)}<br>` +
+		`&nbsp;&nbsp;Aperture radius = ${apertureRadius.toPrecision(4)}<br>` +
+		`&nbsp;&nbsp;Focussing distance = ${focusDistance.toPrecision(4)}<br>` +
+		`&nbsp;&nbsp;Number of rays = ${noOfRays}`
+		// `apertureXHat = (${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.apertureXHat.value.z.toPrecision(4)})<br>` +
+		// `apertureYHat = (${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.apertureYHat.value.z.toPrecision(4)})`
 		;
 		console.log("*");
 }
@@ -974,7 +1003,7 @@ function createInfo() {
 	info.style.fontFamily = "Arial";
 	info.style.fontSize = "9pt";
 	info.innerHTML = "-- nothing to show (yet) --";
-	info.style.top = 70 + 'px';
+	info.style.top = 60 + 'px';
 	info.style.left = 0 + 'px';
 	info.style.zIndex = 1;
 	document.body.appendChild(info);
