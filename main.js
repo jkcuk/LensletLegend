@@ -620,7 +620,7 @@ function addRaytracingSphere() {
 						if((abs(d1.x) < tanHalfFovHE) && (abs(d1.y) < tanHalfFovVE))
 							// yes, the ray intersects the image; take the pixel colour from the camera's video feed
 							color = texture2D(videoFeedETexture, vec2(0.5+0.5*d1.x/tanHalfFovHE, 0.5+0.5*d1.y/tanHalfFovVE));
-						else color = vec4(0, 1, 1, 1.0);	// white
+						else color = vec4(1, 1, 1, 1.0);	// white
 					} else {
 						// backwards-facing ray
 						if((abs(d1.x) < tanHalfFovHU) && (abs(d1.y) < tanHalfFovVU))
