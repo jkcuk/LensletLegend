@@ -125,7 +125,8 @@ function init() {
 	// share button
 	document.getElementById('shareButton').addEventListener('click', share);
 	document.getElementById('shareButton').style.visibility = "hidden";
-	if(!(navigator.share)) document.getElementById('shareButton').style.opacity = 0.3;
+	if(!(navigator.share)) document.getElementById('shareButton').src="./shareButtonUnavailable.png";
+	// if(!(navigator.share)) document.getElementById('shareButton').style.opacity = 0.3;
 
 	// delete button
 	document.getElementById('deleteButton').addEventListener('click', deleteStoredPhoto);
@@ -348,10 +349,14 @@ function addRaytracingSphere() {
 	videoFeedUTexture.colorSpace = THREE.SRGBColorSpace;
 	videoFeedETexture.colorSpace = THREE.SRGBColorSpace;
 
-	// create random numbers
-	let i=0;
+	// create arrays of random numbers (as GLSL is rubbish at doing random numbers)
 	let randomNumbersX = [];
 	let randomNumbersY = [];
+	// make the first random number 0 in both arrays, meaning the 0th ray starts from the centre of the aperture
+	randomNumbersX.push(0);
+	randomNumbersY.push(0);
+	// fill in the rest of the array with random numbers
+	let i=1;
 	do {
 		// create a new pairs or random numbers (x, y) such that x^2 + y^2 <= 1
 		let x = 2*Math.random()-1;	// random number between -1 and 1
@@ -667,7 +672,7 @@ function createGUI() {
 	const params2 = {
 		'Visible': raytracingSphereShaderMaterial.uniforms.visible2.value,
 		'Focal length, <i>f</i><sub>2</sub>': raytracingSphereShaderMaterial.uniforms.focalLength2.value,
-		'&Delta;<sub>period</sub>, <i>p</i><sub>2</sub> - <i>p</i><sub>1</sub>': deltaPeriod,
+		'&Delta;<i>p</i> (<i>p</i><sub>2</sub> = <i>p</i><sub>1</sub> + &Delta;<i>p</i>)': deltaPeriod,
 		'Rotation angle (&deg;)': raytracingSphereShaderMaterial.uniforms.alpha2.value / Math.PI * 180.,
 		'Offset from confocal': offsetFromConfocal
 	};
@@ -698,7 +703,7 @@ function createGUI() {
 
 	folderArray2.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible2.value = v; } );
 	folderArray2.add( params2, 'Focal length, <i>f</i><sub>2</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength2.value = f; } );
-	folderArray2.add( params2, '&Delta;<sub>period</sub>, <i>p</i><sub>2</sub> - <i>p</i><sub>1</sub>', -0.1, 0.1).onChange( (p) => { deltaPeriod = p; } );
+	folderArray2.add( params2, '&Delta;<i>p</i> (<i>p</i><sub>2</sub> = <i>p</i><sub>1</sub> + &Delta;<i>p</i>)', -0.1, 0.1).onChange( (p) => { deltaPeriod = p; } );
 	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
 	folderArray2.add( params2, 'Offset from confocal', -0.25, 0.25).onChange( (o) => { offsetFromConfocal = o; } );
 
@@ -966,15 +971,16 @@ function getInfoString() {
 		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z.toPrecision(4)})<br>` +
 		`Lenslet array 2 (the farther array, when seen in "forward" direction)<br>` +
 		`&nbsp;&nbsp;Visible `+ (raytracingSphereShaderMaterial.uniforms.visible2.value?'&check;':'&cross;')+`<br>` +
-		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toPrecision(4)} (&Delta;<sub>period</sub> = ${deltaPeriod.toPrecision(4)})<br>` +
+		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toPrecision(4)} (&Delta;<i>p</i> = ${deltaPeriod.toPrecision(4)})<br>` +
 		`&nbsp;&nbsp;Rotation angle = ${raytracingSphereShaderMaterial.uniforms.alpha2.value.toPrecision(4)}&deg;<br>` +
 		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength2.value.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius2.value.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z.toPrecision(4)}) (offset from confocal = ${offsetFromConfocal.toPrecision(4)})<br>` +
-		`Camera position = (${camera.position.x.toPrecision(4)}, ${camera.position.y.toPrecision(4)}, ${camera.position.z.toPrecision(4)})<br>` +
-		`Horiz. FOV of user-facing(?) camera = ${fovVideoFeedU.toPrecision(4)}&deg;<br>` +	// (user-facing) camera
-		`Horiz. FOV of environment-facing(?) camera = ${fovVideoFeedE.toPrecision(4)}&deg;<br>` +	// (environment-facing) camera
+		`Horizontal Field of view of device cameras<br>` +
+		`&nbsp;&nbsp;User-facing camera = ${fovVideoFeedU.toPrecision(4)}&deg;<br>` +	// (user-facing) camera
+		`&nbsp;&nbsp;Environment-facing camera = ${fovVideoFeedE.toPrecision(4)}&deg;<br>` +	// (environment-facing) camera
 		`Virtual camera<br>` +
+		`&nbsp;&nbsp;Position = (${camera.position.x.toPrecision(4)}, ${camera.position.y.toPrecision(4)}, ${camera.position.z.toPrecision(4)})<br>` +
 		`&nbsp;&nbsp;Horiz. FOV = ${fovScreen.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Aperture radius = ${apertureRadius.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Focussing distance = ${focusDistance.toPrecision(4)}<br>` +
