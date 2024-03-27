@@ -103,44 +103,7 @@ function init() {
 
 	// user interface
 
-	// handle device orientation
-	// window.addEventListener("deviceorientation", handleOrientation, true);
-
-	// handle window resize
-	window.addEventListener("resize", onWindowResize, false);
-
-	// share button functionality
-	document.getElementById('takePhotoButton').addEventListener('click', takePhoto);
-
-	// toggle fullscreen button functionality
-	document.getElementById('fullscreenButton').addEventListener('click', toggleFullscreen);
-
-	// info button functionality
-	document.getElementById('infoButton').addEventListener('click', toggleInfoVisibility);
-
-	// back button functionality
-	document.getElementById('backButton').addEventListener('click', showLivePhoto);
-	document.getElementById('backButton').style.visibility = "hidden";
-
-	// share button
-	document.getElementById('shareButton').addEventListener('click', share);
-	document.getElementById('shareButton').style.visibility = "hidden";
-	if(!(navigator.share)) document.getElementById('shareButton').src="./shareButtonUnavailable.png";
-	// if(!(navigator.share)) document.getElementById('shareButton').style.opacity = 0.3;
-
-	// delete button
-	document.getElementById('deleteButton').addEventListener('click', deleteStoredPhoto);
-	document.getElementById('deleteButton').style.visibility = "hidden";
-
-	// hide the thumbnail for the moment
-	document.getElementById('storedPhotoThumbnail').addEventListener('click', showStoredPhoto);
-	document.getElementById('storedPhotoThumbnail').style.visibility = "hidden";
-	document.getElementById('storedPhoto').addEventListener('click', showLivePhoto);
-	document.getElementById('storedPhoto').style.visibility = "hidden";
-	showingStoredPhoto = false;
-
-	// handle screen-orientation (landscape/portrait) change
-	screen.orientation.addEventListener( "change", recreateVideoFeeds );
+	addEventListenersEtc();
 
 	addOrbitControls();
 
@@ -389,6 +352,7 @@ function addRaytracingSphere() {
 			focalLength2: { value: -0.5 },
 			centreOfArray2: { value: new THREE.Vector3(0, 0, 0) },	// principal point of lenslet (0, 0)
 			radius2: { value: 5.0 },	// radius of array 2
+			idealLenses: { value: false },
 			videoFeedUTexture: { value: videoFeedUTexture }, 
 			videoFeedETexture: { value: videoFeedETexture }, 
 			// cameraLensDistance: { value: cameraLensDistance },
@@ -436,6 +400,8 @@ function addRaytracingSphere() {
 			uniform vec3 centreOfArray2;	// centre of array 2,  and principal point of lenslet (0, 0)
 			uniform float radius2;	// radius of array 2
 
+			uniform bool idealLenses;	// true => use ideal thin lenses; false => use lens holograms
+
 			// video feed from user-facing camera
 			uniform sampler2D videoFeedUTexture;
 			uniform float tanHalfFovHU;
@@ -478,6 +444,17 @@ function addRaytracingSphere() {
 				return d - r/f;
 			}
 
+			// Simulate deflection upon transmission through a lens hologram.
+			// d is the incident light-ray direction
+			// r = I - P is a vector from the principal point, P, to the intersection point, I
+			vec3 lensHologramDeflect(vec3 d, vec3 r, float f) {
+				// normalise d
+				vec3 d1 = d/length(d);
+				// outgoing light-ray direction -- note that this is subtly different from that produced by
+				// lensDeflect as the direction is normalised differently
+				return d1 - r/f;
+			}
+
 			// Pass the current ray (start point p, direction d, brightness factor b) through (or around) a lens.
 			// The (ideal thin) lens, of focal length f, is in a z plane through centreOfLens.
 			// It is circular, with the given radius, centred on centreOfLenss.
@@ -489,7 +466,7 @@ function addRaytracingSphere() {
 				float radius,
 				float focalLength
 			) {
-				// "normalised" version of d, scaled such that the z component is 1
+				// "normalised" version of d, scaled such that the z component is +1
 				vec3 d1 = d/d.z;
 
 				// calculate the intersection point with the lens
@@ -501,14 +478,16 @@ function addRaytracingSphere() {
 					b *= vec4(0.7, 0.3, 0.3, 1);
 				}
 
-				// does the intersection point lie with in the radius?
-				vec2 r = p.xy - centreOfLens.xy;
-				float r2 = dot(r, r);	// length squared of vector r
+				// does the intersection point lie within the radius?
+				vec3 r = p - centreOfLens;
+				vec2 rxy = r.xy;
+				float r2 = dot(rxy, rxy);	// length squared of vector r
 				if(r2 < radius*radius) {
 					// the intersection point lies inside the radius, so the lens does something to the ray
 
 					// deflect the light-ray direction accordingly and make sure that the sign of the z component remains the same
-					d = vec3(lensDeflect(-d1.xy, r, focalLength), sign(d.z));
+					if(idealLenses) d = vec3(lensDeflect(-d1.xy, rxy, focalLength), sign(d.z));
+					else d = lensHologramDeflect(d, r, focalLength);
 
 					// lower the brightness factor, giving the light a blue tinge
 					b *= vec4(0.9, 0.9, 0.99, 1);
@@ -536,12 +515,16 @@ function addRaytracingSphere() {
 
 			vec2 lensletArrayDeflect(vec2 d, vec2 intersectionPoint, vec2 principalPoint00, float alpha, float period, float focalLength) {
 				vec2 r = intersectionPoint - principalPoint00;
-				vec2 principalPoint = findNearestPrincipalPoint(
-					intersectionPoint - principalPoint00, 
-					principalPoint00, alpha, period, period
-				);
+				vec2 principalPoint = findNearestPrincipalPoint(r, principalPoint00, alpha, period, period);
 				// light-ray direction after array
 				return lensDeflect(d, intersectionPoint - principalPoint, focalLength);
+			}
+
+			vec3 lensletArrayHologramDeflect(vec3 d, vec3 intersectionPoint, vec3 principalPoint00, float alpha, float period, float focalLength) {
+				vec3 r = intersectionPoint - principalPoint00;
+				vec3 principalPoint = vec3(findNearestPrincipalPoint(r.xy, principalPoint00.xy, alpha, period, period), principalPoint00.z);
+				// light-ray direction after array
+				return lensHologramDeflect(d, intersectionPoint - principalPoint, focalLength);
 			}
 
 			// Pass the current ray (start point p, direction d, brightness factor b) through (or around) a lenslet array.
@@ -575,7 +558,8 @@ function addRaytracingSphere() {
 					// the intersection point lies inside the radius, so the component does something to the ray
 
 					// deflect the light-ray direction accordingly and make sure that the sign of the z component remains the same
-					d = vec3(lensletArrayDeflect(d2, p.xy, centreOfArray.xy, alpha, period, focalLength), sign(d.z));
+					if(idealLenses) d = vec3(lensletArrayDeflect(d2, p.xy, centreOfArray.xy, alpha, period, focalLength), sign(d.z));
+					else d = lensletArrayHologramDeflect(d, p, centreOfArray, alpha, period, focalLength);
 
 					// // which direction is the ray passing through it?
 					// if(d.z < 0.0) {
@@ -629,7 +613,7 @@ function addRaytracingSphere() {
 					}
 	
 					// does the ray intersect the (infinitely distant) camera image whose angular width and height is
-					// given by arctan(2*tanHalfFovH) and arctan(2*tanHalfFovV?
+					// given by arctan(2*tanHalfFovH) and arctan(2*tanHalfFovV)?
 					vec3 d1 = d/abs(d.z);
 					if(d.z < 0.0) {
 						// forwards-facing ray
@@ -657,6 +641,47 @@ function addRaytracingSphere() {
 	scene.add( raytracingSphere );
 }
 
+function addEventListenersEtc() {
+	// handle device orientation
+	// window.addEventListener("deviceorientation", handleOrientation, true);
+
+	// handle window resize
+	window.addEventListener("resize", onWindowResize, false);
+
+	// handle screen-orientation (landscape/portrait) change
+	screen.orientation.addEventListener( "change", recreateVideoFeeds );
+
+	// share button functionality
+	document.getElementById('takePhotoButton').addEventListener('click', takePhoto);
+
+	// toggle fullscreen button functionality
+	document.getElementById('fullscreenButton').addEventListener('click', toggleFullscreen);
+
+	// info button functionality
+	document.getElementById('infoButton').addEventListener('click', toggleInfoVisibility);
+
+	// back button functionality
+	document.getElementById('backButton').addEventListener('click', showLivePhoto);
+	document.getElementById('backButton').style.visibility = "hidden";
+
+	// share button
+	document.getElementById('shareButton').addEventListener('click', share);
+	document.getElementById('shareButton').style.visibility = "hidden";
+	if(!(navigator.share)) document.getElementById('shareButton').src="./shareButtonUnavailable.png";
+	// if(!(navigator.share)) document.getElementById('shareButton').style.opacity = 0.3;
+
+	// delete button
+	document.getElementById('deleteButton').addEventListener('click', deleteStoredPhoto);
+	document.getElementById('deleteButton').style.visibility = "hidden";
+
+	// hide the thumbnail for the moment
+	document.getElementById('storedPhotoThumbnail').addEventListener('click', showStoredPhoto);
+	document.getElementById('storedPhotoThumbnail').style.visibility = "hidden";
+	document.getElementById('storedPhoto').addEventListener('click', showLivePhoto);
+	document.getElementById('storedPhoto').style.visibility = "hidden";
+	// showingStoredPhoto = false;
+}
+
 // see https://github.com/mrdoob/three.js/blob/master/examples/webgl_animation_skinning_additive_blending.html
 function createGUI() {
 	// const 
@@ -678,6 +703,7 @@ function createGUI() {
 	};
 	const params = {
 		// 'Swap arrays': swapArrays,
+		'Ideal lenses': raytracingSphereShaderMaterial.uniforms.idealLenses.value,
 		'Horiz. FOV (&deg;)': fovScreen,
 		'Aperture radius': apertureRadius,
 		'tan<sup>-1</sup>(focus. dist.)': Math.atan(focusDistance),
@@ -692,7 +718,7 @@ function createGUI() {
 		}
 	}
 
-	const folderArray1 = gui.addFolder( 'Lenslet array 1 (near; <i>z</i> = 0)' );
+	const folderArray1 = gui.addFolder( 'Lenslet array 1 (near; <i>z</i><sub>1</sub> = 0)' );
 
 	folderArray1.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible1.value = v; } );
 	folderArray1.add( params1, 'Focal length, <i>f</i><sub>1</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.focalLength1.value = f; } );
@@ -719,6 +745,7 @@ function createGUI() {
 	folderVirtualCamera.add( params, 'No of rays', 1, 100, 1).onChange( (n) => { noOfRays = n; } );
 
 	const folderSettings = gui.addFolder( 'Other controls' );
+	folderSettings.add( params, 'Ideal lenses').onChange( (b) => { raytracingSphereShaderMaterial.uniforms.idealLenses.value = b; } );
 	folderSettings.add( params, 'Point (virtual) cam. forward (in -<b>z</b> direction)');
 	folderSettings.add( params, 'Show/hide info');
 	folderSettings.add( params, 'Restart video streams');
@@ -976,6 +1003,7 @@ function getInfoString() {
 		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.focalLength2.value.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius2.value.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z.toPrecision(4)}) (offset from confocal = ${offsetFromConfocal.toPrecision(4)})<br>` +
+		(raytracingSphereShaderMaterial.uniforms.idealLenses.value?'Ideal lenses':'Lens holograms') + "<br>" +
 		`Horizontal Field of view of device cameras<br>` +
 		`&nbsp;&nbsp;User-facing camera = ${fovVideoFeedU.toPrecision(4)}&deg;<br>` +	// (user-facing) camera
 		`&nbsp;&nbsp;Environment-facing camera = ${fovVideoFeedE.toPrecision(4)}&deg;<br>` +	// (environment-facing) camera
