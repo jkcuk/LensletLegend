@@ -344,14 +344,14 @@ function addRaytracingSphere() {
 			period1: { value: 0.4 },
 			alpha1: { value: 0.0 },
 			lensletsF1: { value: 1.0 },	// focal length of the individual lenslets
-			overallF1: { value: 1e10 },	// additional focal length of lenslet array (an additional lens in the same plane)
+			additionalF1: { value: 1e10 },	// additional focal length of lenslet array (an additional lens in the same plane)
 			centreOfArray1: { value: new THREE.Vector3(0, 0, 0) },	// principal point of lenslet (0, 0)
 			radius1: { value: 5.0 },	// radius of array 1
 			visible2: { value: true },
 			period2: { value: 0.4 },
 			alpha2: { value: 0 },
 			lensletsF2: { value: -0.5 },
-			overallF2: { value: 1e10 },	// additional focal length of lenslet array (an additional lens in the same plane)
+			additionalF2: { value: 1e10 },	// additional focal length of lenslet array (an additional lens in the same plane)
 			centreOfArray2: { value: new THREE.Vector3(0, 0, 0) },	// principal point of lenslet (0, 0)
 			radius2: { value: 5.0 },	// radius of array 2
 			idealLenses: { value: true },
@@ -396,7 +396,7 @@ function addRaytracingSphere() {
 			uniform float alpha1;	// rotation angle of array 1
 			uniform float period1;	// period of array 1
 			uniform float lensletsF1;	// focal length of array 1
-			uniform float overallF1;	// additional focal length of lenslet array (an additional lens in the same plane)
+			uniform float additionalF1;	// additional focal length of lenslet array (an additional lens in the same plane)
 			uniform vec3 centreOfArray1;	// centre of array 1,  and principal point of lenslet (0, 0)
 			uniform float radius1;	// radius of array 1
 
@@ -405,7 +405,7 @@ function addRaytracingSphere() {
 			uniform float alpha2;	// rotation angle of array 2
 			uniform float period2;	// period of array 2
 			uniform float lensletsF2;	// focal length of array 2
-			uniform float overallF2;	// additional focal length of lenslet array (an additional lens in the same plane)
+			uniform float additionalF2;	// additional focal length of lenslet array (an additional lens in the same plane)
 			uniform vec3 centreOfArray2;	// centre of array 2,  and principal point of lenslet (0, 0)
 			uniform float radius2;	// radius of array 2
 
@@ -637,16 +637,16 @@ function addRaytracingSphere() {
 					if(d.z < 0.0) {
 						// the ray is travelling "forwards", in the (-z) direction;
 						// pass first through array 1, then array 2, then to environment-facing video feed
-						if(visible1) passThroughLensletArray(p, d, b, centreOfArray1, radius1, alpha1, period1, lensletsF1, overallF1);
-						if(visible2) passThroughLensletArray(p, d, b, centreOfArray2, radius2, alpha2, period2, lensletsF2, overallF2);
+						if(visible1) passThroughLensletArray(p, d, b, centreOfArray1, radius1, alpha1, period1, lensletsF1, additionalF1);
+						if(visible2) passThroughLensletArray(p, d, b, centreOfArray2, radius2, alpha2, period2, lensletsF2, additionalF2);
 						color = getColorOfVideoFeed(p, d, b, -videoDistance, videoFeedETexture, halfWidthE, halfHeightE, vec4(1, 1, 1, 1.0));	// white
 						// if(visible1) passThroughLens(p, d, b, centreOfArray1,  radius1, lensletsF1);
 						// if(visible2) passThroughLens(p, d, b, centreOfArray2,  radius2, lensletsF2);
 					} else {
 						// the ray is travelling "backwards", in the (+z) direction;
 						// pass first through array 2, then array 1, then to user-facing video feed
-						if(visible2) passThroughLensletArray(p, d, b, centreOfArray2, radius2, alpha2, period2, lensletsF2, overallF2);
-						if(visible1) passThroughLensletArray(p, d, b, centreOfArray1, radius1, alpha1, period1, lensletsF1, overallF1);
+						if(visible2) passThroughLensletArray(p, d, b, centreOfArray2, radius2, alpha2, period2, lensletsF2, additionalF2);
+						if(visible1) passThroughLensletArray(p, d, b, centreOfArray1, radius1, alpha1, period1, lensletsF1, additionalF1);
 						color = getColorOfVideoFeed(p, d, b, videoDistance, videoFeedUTexture, halfWidthU, halfHeightU, vec4(1, 0, 0, 1.0));	// white
 					}
 		
@@ -712,14 +712,14 @@ function createGUI() {
 	const params1 = {
 		'Visible': raytracingSphereShaderMaterial.uniforms.visible1.value,
 		'Lenslets <i>f</i><sub>1</sub>': raytracingSphereShaderMaterial.uniforms.lensletsF1.value,
-		'tan<sup>-1</sup>(Overall <i>F</i><sub>1</sub>)': Math.atan(raytracingSphereShaderMaterial.uniforms.overallF1.value),
+		'tan<sup>-1</sup>(additional <i>F</i><sub>1</sub>)': Math.atan(raytracingSphereShaderMaterial.uniforms.additionalF1.value),
 		'Period, <i>p</i><sub>1</sub>': raytracingSphereShaderMaterial.uniforms.period1.value,
 		'Rotation angle (&deg;)': raytracingSphereShaderMaterial.uniforms.alpha1.value / Math.PI * 180.
 	};
 	const params2 = {
 		'Visible': raytracingSphereShaderMaterial.uniforms.visible2.value,
 		'Lenslets <i>f</i><sub>2</sub>': raytracingSphereShaderMaterial.uniforms.lensletsF2.value,
-		'tan<sup>-1</sup>(Overall <i>F</i><sub>2</sub>)': Math.atan(raytracingSphereShaderMaterial.uniforms.overallF2.value),
+		'tan<sup>-1</sup>(additional <i>F</i><sub>2</sub>)': Math.atan(raytracingSphereShaderMaterial.uniforms.additionalF2.value),
 		'&Delta;<i>p</i> (<i>p</i><sub>2</sub> = <i>p</i><sub>1</sub> + &Delta;<i>p</i>)': deltaPeriod,
 		'Rotation angle (&deg;)': raytracingSphereShaderMaterial.uniforms.alpha2.value / Math.PI * 180.,
 		'Offset from confocal': offsetFromConfocal
@@ -747,7 +747,7 @@ function createGUI() {
 
 	folderArray1.add( params1, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible1.value = v; } );
 	folderArray1.add( params1, 'Lenslets <i>f</i><sub>1</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.lensletsF1.value = f; } );
-	folderArray1.add( params1, 'tan<sup>-1</sup>(Overall <i>F</i><sub>1</sub>)', -0.5*Math.PI, 0.5*Math.PI).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.overallF1.value = Math.tan(f); } );
+	folderArray1.add( params1, 'tan<sup>-1</sup>(additional <i>F</i><sub>1</sub>)', -0.5*Math.PI, 0.5*Math.PI).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.additionalF1.value = Math.tan(f); } );
 	folderArray1.add( params1, 'Period, <i>p</i><sub>1</sub>', 0.01, 1).onChange( (p) => { raytracingSphereShaderMaterial.uniforms.period1.value = p; } );
 	folderArray1.add( params1, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha1.value = alpha/180.0*Math.PI; } );
 
@@ -755,7 +755,7 @@ function createGUI() {
 
 	folderArray2.add( params2, 'Visible').onChange( (v) => { raytracingSphereShaderMaterial.uniforms.visible2.value = v; } );
 	folderArray2.add( params2, 'Lenslets <i>f</i><sub>2</sub>', -1, 1).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.lensletsF2.value = f; } );
-	folderArray2.add( params2, 'tan<sup>-1</sup>(Overall <i>F</i><sub>2</sub>)', -0.5*Math.PI, 0.5*Math.PI).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.overallF2.value = Math.tan(f); } );
+	folderArray2.add( params2, 'tan<sup>-1</sup>(additional <i>F</i><sub>2</sub>)', -0.5*Math.PI, 0.5*Math.PI).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.additionalF2.value = Math.tan(f); } );
 	folderArray2.add( params2, '&Delta;<i>p</i> (<i>p</i><sub>2</sub> = <i>p</i><sub>1</sub> + &Delta;<i>p</i>)', -0.1, 0.1).onChange( (p) => { deltaPeriod = p; } );
 	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
 	folderArray2.add( params2, 'Offset from confocal', -0.25, 0.25).onChange( (o) => { offsetFromConfocal = o; } );
@@ -1029,6 +1029,7 @@ function getInfoString() {
 		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.lensletsF1.value.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius1.value.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray1.value.z.toPrecision(4)})<br>` +
+		`&nbsp;&nbsp;Focal length of additional lens in same plane = ${raytracingSphereShaderMaterial.uniforms.additionalF1.value.toPrecision(4)}<br>` +		
 		`Lenslet array 2 (the farther array, when seen in "forward" direction)<br>` +
 		`&nbsp;&nbsp;Visible `+ (raytracingSphereShaderMaterial.uniforms.visible2.value?'&check;':'&cross;')+`<br>` +
 		`&nbsp;&nbsp;Period = ${raytracingSphereShaderMaterial.uniforms.period2.value.toPrecision(4)} (&Delta;<i>p</i> = ${deltaPeriod.toPrecision(4)})<br>` +
@@ -1036,6 +1037,7 @@ function getInfoString() {
 		`&nbsp;&nbsp;Focal length = ${raytracingSphereShaderMaterial.uniforms.lensletsF2.value.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Radius = ${raytracingSphereShaderMaterial.uniforms.radius2.value.toPrecision(4)}<br>` +
 		`&nbsp;&nbsp;Centre of array = (${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y.toPrecision(4)}, ${raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.z.toPrecision(4)}) (offset from confocal = ${offsetFromConfocal.toPrecision(4)})<br>` +
+		`&nbsp;&nbsp;Focal length of additional lens in same plane = ${raytracingSphereShaderMaterial.uniforms.additionalF2.value.toPrecision(4)}<br>` +		
 		'Lenslet type: '+(raytracingSphereShaderMaterial.uniforms.idealLenses.value?'Ideal thin lenses':'Phase holograms') + "<br>" +
 		`Video feeds<br>` +
 		`&nbsp;&nbsp;Distance from origin = ${raytracingSphereShaderMaterial.uniforms.videoDistance.value.toPrecision(4)}<br>` +	// (user-facing) camera
