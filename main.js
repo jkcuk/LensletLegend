@@ -37,7 +37,7 @@ let fovScreen = 68;
 
 let cameraLensDistance = 10.0;
 let raytracingSphereRadius = 20.0;
-let offsetFromConfocal = 0.0;
+let offsetFromConfocal = 0.0001;
 let deltaPeriod = 0.0;
 
 // camera with wide aperture
@@ -722,6 +722,8 @@ function createGUI() {
 		'tan<sup>-1</sup>(additional <i>F</i><sub>2</sub>)': Math.atan(raytracingSphereShaderMaterial.uniforms.additionalF2.value),
 		'&Delta;<i>p</i> (<i>p</i><sub>2</sub> = <i>p</i><sub>1</sub> + &Delta;<i>p</i>)': deltaPeriod,
 		'Rotation angle (&deg;)': raytracingSphereShaderMaterial.uniforms.alpha2.value / Math.PI * 180.,
+		'deltaX2': raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x,
+		'deltaY2': raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y,
 		'Offset from confocal': offsetFromConfocal
 	};
 	const params = {
@@ -758,6 +760,12 @@ function createGUI() {
 	folderArray2.add( params2, 'tan<sup>-1</sup>(additional <i>F</i><sub>2</sub>)', -0.5*Math.PI, 0.5*Math.PI).onChange( (f) => { raytracingSphereShaderMaterial.uniforms.additionalF2.value = Math.tan(f); } );
 	folderArray2.add( params2, '&Delta;<i>p</i> (<i>p</i><sub>2</sub> = <i>p</i><sub>1</sub> + &Delta;<i>p</i>)', -0.1, 0.1).onChange( (p) => { deltaPeriod = p; } );
 	folderArray2.add( params2, 'Rotation angle (&deg;)', -10, 10).onChange( (alpha) => { raytracingSphereShaderMaterial.uniforms.alpha2.value = alpha/180.0*Math.PI; } );
+	folderArray2.add( params2, 'deltaX2', -0.25, 0.25)
+	.name('&Delta;<i>x</i>')
+	.onChange( (d) => { raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.x = d; } );
+	folderArray2.add( params2, 'deltaY2', -0.25, 0.25)
+	.name('&Delta;<i>y</i>')
+	.onChange( (d) => { raytracingSphereShaderMaterial.uniforms.centreOfArray2.value.y = d; } );
 	folderArray2.add( params2, 'Offset from confocal', -0.25, 0.25).onChange( (o) => { offsetFromConfocal = o; } );
 
 	const folderDevice = gui.addFolder( 'Device cameras horiz. FOV' );
